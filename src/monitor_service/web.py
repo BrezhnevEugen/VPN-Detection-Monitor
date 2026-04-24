@@ -34,7 +34,9 @@ UI_TEXT = {
         "priority_news": "Приоритетные новости",
         "priority_news_meta": "Новости из лент, где упомянуты приоритетные приложения или соседние сигналы по теме.",
         "baseline_title": "База из статьи",
-        "baseline_meta": "Базовая точка из статьи на Хабре. `baseline_date` зафиксирован как `2026-04-01` по формулировке “начало апреля 2026”.",
+        "baseline_meta_prefix": "Базовая точка из",
+        "baseline_meta_link_label": "статьи на Хабре",
+        "baseline_meta_suffix": ". `baseline_date` зафиксирован как `2026-04-01` по формулировке “начало апреля 2026”.",
         "scan_dynamics": "Динамика сканов",
         "scan_dynamics_meta": "Каждый запуск сканера сохраняет версию, путь, число методов и набор совпадений. Это и есть основа для динамики по релизам.",
         "where_found": "Где найдено",
@@ -101,7 +103,9 @@ UI_TEXT = {
         "priority_news": "Priority News",
         "priority_news_meta": "Feed items mentioning priority apps or nearby signals related to VPN detection.",
         "baseline_title": "Baseline From Article",
-        "baseline_meta": "Baseline snapshot from the Habr article. `baseline_date` is fixed as `2026-04-01` based on the article wording “early April 2026”.",
+        "baseline_meta_prefix": "Baseline snapshot from the",
+        "baseline_meta_link_label": "Habr article",
+        "baseline_meta_suffix": ". `baseline_date` is fixed as `2026-04-01` based on the article wording “early April 2026”.",
         "scan_dynamics": "Scan Dynamics",
         "scan_dynamics_meta": "Each scanner run stores the version, target path, method count, and the matched signals. That is the basis for release-to-release dynamics.",
         "where_found": "Where Found",
@@ -600,7 +604,7 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
         </section>
         <section class="panel">
           <h2>{html.escape(text["baseline_title"])}</h2>
-          <p class="meta">{html.escape(text["baseline_meta"])}</p>
+          <p class="meta">{_render_baseline_meta(text)}</p>
           <table>
             <thead><tr><th>#</th><th>{html.escape(text["app"])}</th><th>{html.escape(text["methods"])}</th><th>{html.escape(text["signatures"])}</th><th>{html.escape(text["notes"])}</th></tr></thead>
             <tbody>{baseline_rows}</tbody>
@@ -760,6 +764,14 @@ def _render_flash(flash: dict[str, str]) -> str:
     if level not in {"success", "error"}:
         level = "success"
     return f'<div class="flash {level}">{html.escape(message)}</div>'
+
+
+def _render_baseline_meta(text: dict[str, str]) -> str:
+    href = "https://habr.com/ru/articles/1026162/"
+    prefix = html.escape(text["baseline_meta_prefix"])
+    label = html.escape(text["baseline_meta_link_label"])
+    suffix = html.escape(text["baseline_meta_suffix"])
+    return f'{prefix} <a href="{href}" target="_blank" rel="noreferrer">{label}</a>{suffix}'
 
 
 def _render_report_markdown(report: dict, lang: str = "ru") -> str:
