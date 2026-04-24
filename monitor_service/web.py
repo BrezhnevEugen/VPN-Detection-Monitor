@@ -140,6 +140,8 @@ def _build_handler(db_path: str):
                 raise ValueError("Please attach a .zip, .tar, .tar.gz, or .tgz archive.")
 
             filename = Path(upload.filename).name
+            if not _is_allowed_archive(filename):
+                raise ValueError("Unsupported file type. Allowed: .zip, .tar, .tar.gz, .tgz.")
             archive_path = archives_root / filename
             archive_path.write_bytes(upload.file.read())
 
@@ -333,7 +335,7 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
     .stat span {{ color: var(--muted); font-size: .95rem; }}
     .controls {{ display:flex; flex-wrap:wrap; gap:14px; margin-top:18px; }}
     label {{ display:grid; gap:6px; color: var(--muted); font-size:.92rem; }}
-    input {{ width:120px; padding:10px 12px; border-radius:10px; border:1px solid var(--border); }}
+    input {{ width:120px; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:#fff; }}
     input[type="file"] {{ width:100%; padding:10px 0; border:0; background:transparent; }}
     button {{ border:0; border-radius:999px; padding:11px 18px; background: var(--accent); color: white; cursor:pointer; }}
     .grid {{ display:grid; grid-template-columns: 1.2fr .8fr; gap:18px; margin-top:18px; }}
@@ -344,8 +346,19 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
     .flash {{ margin-top:18px; padding:14px 16px; border-radius:16px; border:1px solid var(--border); }}
     .flash.success {{ background:#eef6eb; color:#234326; border-color:#c7dec7; }}
     .flash.error {{ background:#fff0eb; color:#7b2d1f; border-color:#f0c9bd; }}
-    .upload-form {{ display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 1.3fr auto; gap:12px; align-items:end; margin-top:18px; }}
-    .upload-form .wide {{ grid-column: span 2; }}
+    .upload-panel {{ margin-top:18px; padding:18px; border-radius:20px; background:linear-gradient(180deg, #fffdfa, #f7f1e8); border:1px solid var(--border); }}
+    .upload-panel h2 {{ margin:0 0 6px; font-size:1.25rem; }}
+    .upload-panel p {{ margin:0; color:var(--muted); }}
+    .upload-form {{ display:grid; grid-template-columns: 1.1fr 0.9fr 1.6fr auto; gap:16px; align-items:end; margin-top:16px; }}
+    .upload-field {{ display:grid; gap:8px; }}
+    .upload-field label {{ gap:4px; font-weight:600; color:var(--ink); }}
+    .upload-field input[type="text"] {{ width:100%; min-height:52px; border-radius:16px; padding:14px 16px; }}
+    .file-shell {{ display:flex; align-items:center; gap:12px; min-height:52px; padding:10px 14px; border:1px dashed #bfae97; border-radius:16px; background:#fff; }}
+    .file-shell input[type="file"] {{ padding:0; }}
+    .file-meta {{ margin-top:6px; color:var(--muted); font-size:.85rem; }}
+    .upload-errors {{ display:none; margin-top:12px; padding:12px 14px; border-radius:14px; background:#fff0eb; border:1px solid #f0c9bd; color:#7b2d1f; }}
+    .upload-errors.active {{ display:block; }}
+    .upload-submit {{ min-height:52px; padding:14px 20px; font-weight:700; white-space:nowrap; }}
     .list {{ display:grid; gap:14px; }}
     .card {{ padding:16px; }}
     .eyebrow {{ display:flex; justify-content:space-between; gap:12px; color:var(--muted); font-size:.9rem; margin-bottom:8px; }}
@@ -361,13 +374,12 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
     th, td {{ text-align:left; padding:10px 8px; border-bottom:1px solid var(--border); vertical-align: top; }}
     th {{ color: var(--muted); font-weight:600; }}
     .mono {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.87rem; word-break: break-all; }}
-    @media (max-width: 980px) {{ .grid {{ grid-template-columns: 1fr; }} .upload-form {{ grid-template-columns: 1fr 1fr; }} .upload-form .wide {{ grid-column: span 2; }} }}
+    @media (max-width: 980px) {{ .grid {{ grid-template-columns: 1fr; }} .upload-form {{ grid-template-columns: 1fr 1fr; }} }}
     @media (max-width: 640px) {{
       .wrap {{ padding:16px 12px 28px; }}
       .hero, .panel, .card {{ border-radius:18px; }}
       input {{ width:100%; }}
       .upload-form {{ grid-template-columns: 1fr; }}
-      .upload-form .wide {{ grid-column: auto; }}
     }}
   </style>
 </head>
@@ -389,14 +401,29 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
         <button type="submit">Update View</button>
       </form>
       {flash_html}
-      <form class="upload-form" method="post" action="/scan-upload" enctype="multipart/form-data">
-        <label>App name<input type="text" name="app_name" placeholder="Yandex Browser" required></label>
-        <label>Version<input type="text" name="version" placeholder="25.4.1" required></label>
-        <label class="wide">Archive with decompiled sources
-          <input type="file" name="bundle" accept=".zip,.tar,.tar.gz,.tgz" required>
-        </label>
-        <button type="submit">Upload And Scan</button>
-      </form>
+      <section class="upload-panel">
+        <h2>Upload Bundle For Scan</h2>
+        <p>Загрузите архив с результатом `jadx` или `apktool`. Форма проверяет заполнение и допустимые расширения ещё до отправки.</p>
+        <form class="upload-form" id="scan-upload-form" method="post" action="/scan-upload" enctype="multipart/form-data" novalidate>
+          <div class="upload-field">
+            <label for="app_name">App name</label>
+            <input id="app_name" type="text" name="app_name" placeholder="Yandex Browser" required>
+          </div>
+          <div class="upload-field">
+            <label for="version">Version</label>
+            <input id="version" type="text" name="version" placeholder="25.4.1" required>
+          </div>
+          <div class="upload-field">
+            <label for="bundle">Archive with decompiled sources</label>
+            <div class="file-shell">
+              <input id="bundle" type="file" name="bundle" accept=".zip,.tar,.tar.gz,.tgz" required>
+            </div>
+            <div class="file-meta">Allowed: .zip, .tar, .tar.gz, .tgz</div>
+          </div>
+          <button class="upload-submit" type="submit">Upload And Scan</button>
+        </form>
+        <div id="upload-errors" class="upload-errors" aria-live="polite"></div>
+      </section>
     </section>
 
     <section class="grid">
@@ -432,6 +459,49 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
       </div>
     </section>
   </main>
+  <script>
+    (() => {{
+      const form = document.getElementById('scan-upload-form');
+      if (!form) return;
+      const appInput = document.getElementById('app_name');
+      const versionInput = document.getElementById('version');
+      const bundleInput = document.getElementById('bundle');
+      const errorsBox = document.getElementById('upload-errors');
+      const allowed = ['.zip', '.tar', '.tar.gz', '.tgz'];
+
+      function showErrors(messages) {{
+        if (!messages.length) {{
+          errorsBox.textContent = '';
+          errorsBox.classList.remove('active');
+          return;
+        }}
+        errorsBox.innerHTML = messages.map((msg) => `<div>${{msg}}</div>`).join('');
+        errorsBox.classList.add('active');
+      }}
+
+      function validExtension(name) {{
+        const lower = name.toLowerCase();
+        return allowed.some((ext) => lower.endsWith(ext));
+      }}
+
+      form.addEventListener('submit', (event) => {{
+        const messages = [];
+        if (!appInput.value.trim()) messages.push('Заполните поле App name.');
+        if (!versionInput.value.trim()) messages.push('Заполните поле Version.');
+        if (!bundleInput.files || !bundleInput.files.length) {{
+          messages.push('Прикрепите архив с декомпилированными исходниками.');
+        }} else if (!validExtension(bundleInput.files[0].name)) {{
+          messages.push('Недопустимое расширение файла. Разрешены: .zip, .tar, .tar.gz, .tgz.');
+        }}
+        if (messages.length) {{
+          event.preventDefault();
+          showErrors(messages);
+        }} else {{
+          showErrors([]);
+        }}
+      }});
+    }})();
+  </script>
 </body>
 </html>"""
 
@@ -562,6 +632,11 @@ def _render_report_markdown(report: dict) -> str:
 def _slugify(value: str) -> str:
     slug = "".join(ch.lower() if ch.isalnum() else "-" for ch in value)
     return "-".join(part for part in slug.split("-") if part) or "report"
+
+
+def _is_allowed_archive(filename: str) -> bool:
+    lower = filename.lower()
+    return any(lower.endswith(ext) for ext in (".zip", ".tar", ".tar.gz", ".tgz"))
 
 
 def _safe_int(raw: str, default: int, minimum: int, maximum: int) -> int:
