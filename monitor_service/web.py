@@ -8,6 +8,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse
 
+from monitor_service.feeds import fetch_article
+from monitor_service.news_methods import extract_news_method_candidates
 from monitor_service.scanner import infer_app_metadata, prepare_scan_target, scan_path
 from monitor_service.storage import Storage
 
@@ -34,6 +36,20 @@ UI_TEXT = {
         "priority_news": "Приоритетные новости",
         "priority_news_meta": "Новости из лент, где упомянуты приоритетные приложения или соседние сигналы по теме.",
         "last_news_update": "Последнее обновление новостей",
+        "news_methods_title": "Новые методы из новостей",
+        "news_methods_meta": "Кандидаты на новые методы детекта VPN и телеметрии, выделенные из новостей и вручную добавленных статей.",
+        "article_submit_title": "Добавить статью по ссылке",
+        "article_url": "Ссылка на статью",
+        "article_submit": "Разобрать статью",
+        "article_saved": "Статья разобрана: {title}. Найдено кандидатов на методы: {count}",
+        "article_no_methods": "Статья сохранена, но новые методы пока не выделены: {title}",
+        "source": "Источник",
+        "status": "Статус",
+        "description": "Описание",
+        "evidence": "Сигнал",
+        "news_only": "Только в новости",
+        "confirmed_in_code": "Подтверждено в коде",
+        "no_news_methods": "Пока нет кандидатов на новые методы.",
         "baseline_title": "База из статьи",
         "baseline_meta_prefix": "Базовая точка из",
         "baseline_meta_link_label": "статьи на Хабре",
@@ -105,6 +121,20 @@ UI_TEXT = {
         "priority_news": "Priority News",
         "priority_news_meta": "Feed items mentioning priority apps or nearby signals related to VPN detection.",
         "last_news_update": "Last news update",
+        "news_methods_title": "New Methods From News",
+        "news_methods_meta": "Candidate VPN-detection and telemetry methods extracted from news and manually added articles.",
+        "article_submit_title": "Add article by URL",
+        "article_url": "Article URL",
+        "article_submit": "Parse article",
+        "article_saved": "Article parsed: {title}. Method candidates found: {count}",
+        "article_no_methods": "Article saved, but no new methods were extracted yet: {title}",
+        "source": "Source",
+        "status": "Status",
+        "description": "Description",
+        "evidence": "Signal",
+        "news_only": "News only",
+        "confirmed_in_code": "Confirmed in code",
+        "no_news_methods": "No candidate methods yet.",
         "baseline_title": "Baseline From Article",
         "baseline_meta_prefix": "Baseline snapshot from the",
         "baseline_meta_link_label": "Habr article",
@@ -231,14 +261,23 @@ def _build_handler(db_path: str):
             self.send_error(404, UI_TEXT[lang]["not_found"])
 
         def do_POST(self) -> None:  # noqa: N802
+            if self.path == "/scan-upload":
+                try:
+                    self._handle_scan_upload()
+                except Exception as exc:  # noqa: BLE001
+                    self._redirect_with_status("error", str(exc))
+                return
+
+            if self.path == "/article-submit":
+                try:
+                    self._handle_article_submit()
+                except Exception as exc:  # noqa: BLE001
+                    self._redirect_with_status("error", str(exc))
+                return
+
             if self.path != "/scan-upload":
                 self.send_error(404, "Not found")
                 return
-
-            try:
-                self._handle_scan_upload()
-            except Exception as exc:  # noqa: BLE001
-                self._redirect_with_status("error", str(exc))
 
         def log_message(self, format: str, *args) -> None:  # noqa: A003
             return
@@ -306,6 +345,55 @@ def _build_handler(db_path: str):
                 ),
                 lang,
             )
+
+        def _handle_article_submit(self) -> None:
+            content_length = int(self.headers.get("Content-Length", "0") or "0")
+            form = cgi.FieldStorage(
+                fp=self.rfile,
+                headers=self.headers,
+                environ={
+                    "REQUEST_METHOD": "POST",
+                    "CONTENT_TYPE": self.headers.get("Content-Type", ""),
+                    "CONTENT_LENGTH": str(content_length),
+                },
+            )
+            lang = _resolve_lang(form.getfirst("lang") or "", self.headers.get("Accept-Language", ""))
+            article_url = (form.getfirst("article_url") or "").strip()
+            if not article_url:
+                raise ValueError(UI_TEXT[lang]["article_url"])
+
+            entry = fetch_article(article_url)
+            candidates = extract_news_method_candidates(
+                entry.title,
+                entry.summary,
+                article_url,
+                source_title=entry.title,
+                source_kind="article",
+            )
+            source_host = urlparse(article_url).netloc or article_url
+            storage = Storage(db_file)
+            try:
+                storage.save_finding(
+                    link=article_url,
+                    source=source_host,
+                    title=entry.title,
+                    summary=entry.summary,
+                    published_at=entry.published_at,
+                    score=max(4, len(candidates) * 3),
+                    matched_keywords=[],
+                    matched_phrases=[],
+                    matched_priority_apps=[],
+                )
+                if candidates:
+                    storage.save_news_method_candidates(candidates)
+            finally:
+                storage.close()
+
+            if candidates:
+                message = UI_TEXT[lang]["article_saved"].format(title=entry.title, count=len(candidates))
+            else:
+                message = UI_TEXT[lang]["article_no_methods"].format(title=entry.title)
+            self._redirect_with_status("success", message, lang)
 
         def _redirect_with_status(self, level: str, message: str, lang: str = "ru") -> None:
             query = urlencode({"scan_status": level, "scan_message": message, "lang": lang})
@@ -383,6 +471,16 @@ def _load_dashboard_data(db_path: str, limit: int, min_score: int) -> dict:
             """
         ).fetchall()
 
+        news_methods = conn.execute(
+            """
+            SELECT method_key, label, description, evidence, source_link, source_title,
+                   source_kind, scanner_method_id, status, created_at, updated_at
+            FROM news_methods
+            ORDER BY updated_at DESC, created_at DESC
+            LIMIT 20
+            """
+        ).fetchall()
+
     return {
         "summary": {
             "total": totals["total"],
@@ -444,6 +542,22 @@ def _load_dashboard_data(db_path: str, limit: int, min_score: int) -> dict:
             }
             for row in hits
         ],
+        "news_methods": [
+            {
+                "method_key": row["method_key"],
+                "label": row["label"],
+                "description": row["description"],
+                "evidence": row["evidence"],
+                "source_link": row["source_link"],
+                "source_title": row["source_title"],
+                "source_kind": row["source_kind"],
+                "scanner_method_id": row["scanner_method_id"],
+                "status": row["status"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            }
+            for row in news_methods
+        ],
     }
 
 
@@ -451,6 +565,7 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
     text = UI_TEXT[lang]
     payload = _load_dashboard_data(db_path, limit=limit, min_score=min_score)
     cards = "\n".join(_render_card(item, text) for item in payload["findings"]) or f"<p>{html.escape(text['no_findings'])}</p>"
+    news_methods_cards = "\n".join(_render_news_method_card(item, text) for item in payload["news_methods"]) or f"<p>{html.escape(text['no_news_methods'])}</p>"
     baseline_rows = "\n".join(_render_baseline_row(item) for item in payload["baselines"]) or f"<tr><td colspan='5'>{html.escape(text['no_baseline'])}</td></tr>"
     run_cards = "\n".join(_render_run_card(item, text, lang) for item in payload["scan_runs"][:12]) or f"<p>{html.escape(text['no_scans'])}</p>"
     hit_rows = "\n".join(_render_hit_row(item) for item in payload["scan_hits"][:40]) or f"<tr><td colspan='5'>{html.escape(text['no_scan_hits'])}</td></tr>"
@@ -530,9 +645,10 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
     .upload-panel h2 {{ margin:0 0 6px; font-size:1.25rem; }}
     .upload-panel p {{ margin:0; color:var(--muted); }}
     .upload-form {{ display:grid; grid-template-columns: 1.1fr 0.9fr 1.6fr auto; gap:16px; align-items:end; margin-top:16px; }}
+    .link-form {{ grid-template-columns: minmax(0, 1fr) auto; }}
     .upload-field {{ display:grid; gap:8px; }}
     .upload-field label {{ gap:4px; font-weight:600; color:var(--ink); }}
-    .upload-field input[type="text"] {{ width:100%; min-height:52px; border-radius:16px; padding:14px 16px; }}
+    .upload-field input[type="text"], .upload-field input[type="url"] {{ width:100%; min-height:52px; border-radius:16px; padding:14px 16px; }}
     .file-shell {{ display:flex; align-items:center; gap:12px; min-height:52px; padding:10px 14px; border:1px dashed #bfae97; border-radius:16px; background:#fff; }}
     .file-shell input[type="file"] {{ padding:0; }}
     .file-meta {{ margin-top:6px; color:var(--muted); font-size:.85rem; }}
@@ -611,6 +727,17 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
         <div id="upload-errors" class="upload-errors" aria-live="polite"></div>
         <div id="upload-status" class="upload-status" aria-live="polite"></div>
       </section>
+      <section class="upload-panel">
+        <h2>{html.escape(text["article_submit_title"])}</h2>
+        <form class="upload-form link-form" method="post" action="/article-submit">
+          <input type="hidden" name="lang" value="{lang}">
+          <div class="upload-field">
+            <label for="article_url">{html.escape(text["article_url"])}</label>
+            <input id="article_url" type="url" name="article_url" placeholder="https://example.com/article" required>
+          </div>
+          <button class="upload-submit" type="submit">{html.escape(text["article_submit"])}</button>
+        </form>
+      </section>
     </section>
 
     <section class="grid">
@@ -620,6 +747,11 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
           <p class="meta">{html.escape(text["priority_news_meta"])}</p>
           {latest_news_update}
           <div class="list">{cards}</div>
+        </section>
+        <section class="panel">
+          <h2>{html.escape(text["news_methods_title"])}</h2>
+          <p class="meta">{html.escape(text["news_methods_meta"])}</p>
+          <div class="list">{news_methods_cards}</div>
         </section>
         <section class="panel">
           <h2>{html.escape(text["baseline_title"])}</h2>
@@ -730,6 +862,27 @@ def _render_card(item: dict, text: dict[str, str]) -> str:
       <p class="summary">{summary}</p>
       <div class="tags">{tags_html}</div>
       <div class="eyebrow" style="margin-top:10px"><span>{html.escape(text["published"])}: {published}</span></div>
+    </article>"""
+
+
+def _render_news_method_card(item: dict, text: dict[str, str]) -> str:
+    source_link = html.escape(item["source_link"], quote=True)
+    source_title = html.escape(item["source_title"])
+    label = html.escape(item["label"])
+    description = html.escape(item["description"])
+    evidence = html.escape(item["evidence"])
+    status = html.escape(text.get(item["status"], item["status"]))
+    source_kind = html.escape(item["source_kind"])
+    updated_at = html.escape(item["updated_at"])
+    return f"""
+    <article class="card">
+      <div class="eyebrow"><span>{status}</span><span class="badge">{source_kind}</span></div>
+      <h3>{label}</h3>
+      <p class="summary">{description}</p>
+      <div class="tags">
+        <span>{html.escape(text["evidence"])}: {evidence}</span>
+      </div>
+      <div class="eyebrow" style="margin-top:10px"><span>{html.escape(text["source"])}: <a href="{source_link}" target="_blank" rel="noreferrer">{source_title}</a></span><span>{updated_at}</span></div>
     </article>"""
 
 

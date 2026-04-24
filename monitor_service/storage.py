@@ -59,6 +59,23 @@ SCHEMA_STATEMENTS = [
         FOREIGN KEY(run_id) REFERENCES scan_runs(id) ON DELETE CASCADE
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS news_methods (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        method_key TEXT NOT NULL,
+        label TEXT NOT NULL,
+        description TEXT NOT NULL,
+        evidence TEXT NOT NULL,
+        source_link TEXT NOT NULL,
+        source_title TEXT NOT NULL,
+        source_kind TEXT NOT NULL DEFAULT 'news',
+        scanner_method_id TEXT,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(method_key, source_link)
+    )
+    """,
 ]
 
 
@@ -90,6 +107,31 @@ class Storage:
                 self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
 
     def save(self, item: ScoredEntry) -> bool:
+        return self.save_finding(
+            link=item.entry.link,
+            source=item.entry.source,
+            title=item.entry.title,
+            summary=item.entry.summary,
+            published_at=item.entry.published_at,
+            score=item.score,
+            matched_keywords=item.matched_keywords,
+            matched_phrases=item.matched_phrases,
+            matched_priority_apps=item.matched_priority_apps,
+        )
+
+    def save_finding(
+        self,
+        *,
+        link: str,
+        source: str,
+        title: str,
+        summary: str,
+        published_at: str | None,
+        score: int,
+        matched_keywords: list[str],
+        matched_phrases: list[str],
+        matched_priority_apps: list[str],
+    ) -> bool:
         cursor = self.conn.execute(
             """
             INSERT OR IGNORE INTO findings (
@@ -98,15 +140,15 @@ class Storage:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                item.entry.link,
-                item.entry.source,
-                item.entry.title,
-                item.entry.summary,
-                item.entry.published_at,
-                item.score,
-                json.dumps(item.matched_keywords, ensure_ascii=False),
-                json.dumps(item.matched_phrases, ensure_ascii=False),
-                json.dumps(item.matched_priority_apps, ensure_ascii=False),
+                link,
+                source,
+                title,
+                summary,
+                published_at,
+                score,
+                json.dumps(matched_keywords, ensure_ascii=False),
+                json.dumps(matched_phrases, ensure_ascii=False),
+                json.dumps(matched_priority_apps, ensure_ascii=False),
             ),
         )
         self.conn.commit()
@@ -226,6 +268,67 @@ class Storage:
             """,
             (limit,),
         ).fetchall()
+
+    def save_news_method_candidates(self, candidates: list[dict[str, str | None]]) -> int:
+        saved = 0
+        for candidate in candidates:
+            scanner_method_id = candidate.get("scanner_method_id")
+            status = "confirmed_in_code" if scanner_method_id and self.has_scanned_method(scanner_method_id) else "news_only"
+            cursor = self.conn.execute(
+                """
+                INSERT INTO news_methods (
+                    method_key, label, description, evidence, source_link,
+                    source_title, source_kind, scanner_method_id, status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(method_key, source_link) DO UPDATE SET
+                    label = excluded.label,
+                    description = excluded.description,
+                    evidence = excluded.evidence,
+                    source_title = excluded.source_title,
+                    source_kind = excluded.source_kind,
+                    scanner_method_id = excluded.scanner_method_id,
+                    status = excluded.status,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    candidate["method_key"],
+                    candidate["label"],
+                    candidate["description"],
+                    candidate["evidence"],
+                    candidate["source_link"],
+                    candidate["source_title"],
+                    candidate["source_kind"],
+                    scanner_method_id,
+                    status,
+                ),
+            )
+            saved += cursor.rowcount
+        self.conn.commit()
+        return saved
+
+    def latest_news_methods(self, limit: int = 20) -> list[sqlite3.Row]:
+        return self.conn.execute(
+            """
+            SELECT method_key, label, description, evidence, source_link, source_title,
+                   source_kind, scanner_method_id, status, created_at, updated_at
+            FROM news_methods
+            ORDER BY updated_at DESC, created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
+    def has_scanned_method(self, method_id: str) -> bool:
+        row = self.conn.execute(
+            """
+            SELECT 1
+            FROM scan_hits
+            WHERE method_id = ?
+            LIMIT 1
+            """,
+            (method_id,),
+        ).fetchone()
+        return row is not None
 
     def scan_report(self, app_name: str, version: str | None = None) -> dict | None:
         if version:

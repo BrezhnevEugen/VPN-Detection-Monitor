@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
 from html import unescape
+import re
 import ssl
 from urllib.error import URLError
 from urllib.request import Request, urlopen
@@ -23,17 +24,7 @@ class FeedEntry:
 
 def fetch_entries(feed_url: str, timeout: int = 20) -> list[FeedEntry]:
     request = Request(feed_url, headers={"User-Agent": USER_AGENT})
-    try:
-        with urlopen(request, timeout=timeout) as response:
-            raw = response.read()
-    except Exception as exc:  # noqa: BLE001
-        if not _is_ssl_verify_error(exc):
-            raise
-        # Some local environments miss CA bundles; retrying unverified keeps the
-        # collector usable for news monitoring instead of failing the whole feed.
-        insecure_context = ssl._create_unverified_context()
-        with urlopen(request, timeout=timeout, context=insecure_context) as response:
-            raw = response.read()
+    raw = _fetch_bytes(request, timeout)
 
     root = ET.fromstring(raw)
     tag = _strip_ns(root.tag)
@@ -42,6 +33,47 @@ def fetch_entries(feed_url: str, timeout: int = 20) -> list[FeedEntry]:
     if tag == "feed":
         return _parse_atom(root, feed_url)
     return []
+
+
+def fetch_article(url: str, timeout: int = 20) -> FeedEntry:
+    request = Request(url, headers={"User-Agent": USER_AGENT})
+    raw = _fetch_bytes(request, timeout)
+    html_text = raw.decode("utf-8", errors="ignore")
+
+    title = _extract_first(
+        html_text,
+        [
+            r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)["\']',
+            r'<meta[^>]+name=["\']twitter:title["\'][^>]+content=["\']([^"\']+)["\']',
+            r"<title>(.*?)</title>",
+        ],
+    )
+    description = _extract_first(
+        html_text,
+        [
+            r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']+)["\']',
+            r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']+)["\']',
+        ],
+    )
+    published = _normalize_dt(
+        _extract_first(
+            html_text,
+            [
+                r'<meta[^>]+property=["\']article:published_time["\'][^>]+content=["\']([^"\']+)["\']',
+                r'<meta[^>]+name=["\']pubdate["\'][^>]+content=["\']([^"\']+)["\']',
+                r'<time[^>]+datetime=["\']([^"\']+)["\']',
+            ],
+        )
+    )
+    body_text = _html_to_text(html_text)
+    summary = description or body_text[:1600]
+    return FeedEntry(
+        source=url,
+        title=title or url,
+        link=url,
+        summary=" ".join(summary.split()),
+        published_at=published,
+    )
 
 
 def _parse_rss(root: ET.Element, source: str) -> list[FeedEntry]:
@@ -129,3 +161,30 @@ def _is_ssl_verify_error(exc: Exception) -> bool:
             isinstance(reason, str) and "CERTIFICATE_VERIFY_FAILED" in reason
         )
     return "CERTIFICATE_VERIFY_FAILED" in str(exc)
+
+
+def _fetch_bytes(request: Request, timeout: int) -> bytes:
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            return response.read()
+    except Exception as exc:  # noqa: BLE001
+        if not _is_ssl_verify_error(exc):
+            raise
+        insecure_context = ssl._create_unverified_context()
+        with urlopen(request, timeout=timeout, context=insecure_context) as response:
+            return response.read()
+
+
+def _extract_first(html_text: str, patterns: list[str]) -> str:
+    for pattern in patterns:
+        match = re.search(pattern, html_text, flags=re.IGNORECASE | re.DOTALL)
+        if match:
+            return " ".join(unescape(match.group(1)).split())
+    return ""
+
+
+def _html_to_text(html_text: str) -> str:
+    cleaned = re.sub(r"<script.*?</script>", " ", html_text, flags=re.IGNORECASE | re.DOTALL)
+    cleaned = re.sub(r"<style.*?</style>", " ", cleaned, flags=re.IGNORECASE | re.DOTALL)
+    cleaned = re.sub(r"<[^>]+>", " ", cleaned)
+    return " ".join(unescape(cleaned).split())

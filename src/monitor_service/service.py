@@ -5,6 +5,7 @@ import time
 
 from monitor_service.config import MonitorConfig
 from monitor_service.feeds import fetch_entries
+from monitor_service.news_methods import extract_news_method_candidates
 from monitor_service.scoring import score_entry
 from monitor_service.storage import Storage
 
@@ -36,6 +37,15 @@ class MonitorService:
                 stats["matched"] += 1
                 if self.storage.save(scored):
                     stats["saved"] += 1
+                candidates = extract_news_method_candidates(
+                    scored.entry.title,
+                    scored.entry.summary,
+                    scored.entry.link,
+                    source_title=scored.entry.title,
+                    source_kind="feed",
+                )
+                if candidates:
+                    self.storage.save_news_method_candidates(candidates)
         return stats
 
     def watch(self, interval_seconds: int) -> None:
