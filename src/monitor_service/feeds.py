@@ -66,7 +66,7 @@ def fetch_article(url: str, timeout: int = 20) -> FeedEntry:
         )
     )
     body_text = _html_to_text(html_text)
-    summary = description or body_text[:1600]
+    summary = " ".join(part for part in [description, body_text[:2500]] if part).strip()
     return FeedEntry(
         source=url,
         title=title or url,
