@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import cgi
 import html
 import json
 import sqlite3
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 
+from monitor_service.scanner import scan_path, unpack_archive
+from monitor_service.storage import Storage
+
+
+MAX_UPLOAD_BYTES = 200 * 1024 * 1024
 
 def run_dashboard(db_path: str, host: str = "127.0.0.1", port: int = 8000) -> None:
     server = ThreadingHTTPServer((host, port), _build_handler(db_path))
@@ -16,6 +22,11 @@ def run_dashboard(db_path: str, host: str = "127.0.0.1", port: int = 8000) -> No
 
 def _build_handler(db_path: str):
     db_file = str(Path(db_path).resolve())
+    uploads_root = Path(db_file).resolve().parent / "uploads"
+    archives_root = uploads_root / "archives"
+    extracted_root = uploads_root / "extracted"
+    archives_root.mkdir(parents=True, exist_ok=True)
+    extracted_root.mkdir(parents=True, exist_ok=True)
 
     class DashboardHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802
@@ -23,9 +34,13 @@ def _build_handler(db_path: str):
             query = parse_qs(parsed.query)
             limit = _safe_int(query.get("limit", ["50"])[0], default=50, minimum=1, maximum=200)
             min_score = _safe_int(query.get("min_score", ["0"])[0], default=0, minimum=0, maximum=50)
+            flash = {
+                "level": query.get("scan_status", [""])[0],
+                "message": query.get("scan_message", [""])[0],
+            }
 
             if parsed.path == "/":
-                html_body = _render_page(db_file, limit=limit, min_score=min_score)
+                html_body = _render_page(db_file, limit=limit, min_score=min_score, flash=flash)
                 self._send_html(html_body)
                 return
 
@@ -35,6 +50,16 @@ def _build_handler(db_path: str):
                 return
 
             self.send_error(404, "Not found")
+
+        def do_POST(self) -> None:  # noqa: N802
+            if self.path != "/scan-upload":
+                self.send_error(404, "Not found")
+                return
+
+            try:
+                self._handle_scan_upload()
+            except Exception as exc:  # noqa: BLE001
+                self._redirect_with_status("error", str(exc))
 
         def log_message(self, format: str, *args) -> None:  # noqa: A003
             return
@@ -54,6 +79,55 @@ def _build_handler(db_path: str):
             self.send_header("Content-Length", str(len(encoded)))
             self.end_headers()
             self.wfile.write(encoded)
+
+        def _handle_scan_upload(self) -> None:
+            content_length = int(self.headers.get("Content-Length", "0") or "0")
+            if content_length > MAX_UPLOAD_BYTES:
+                raise ValueError("Archive is too large. Limit is 200 MB.")
+
+            form = cgi.FieldStorage(
+                fp=self.rfile,
+                headers=self.headers,
+                environ={
+                    "REQUEST_METHOD": "POST",
+                    "CONTENT_TYPE": self.headers.get("Content-Type", ""),
+                    "CONTENT_LENGTH": str(content_length),
+                },
+            )
+
+            app_name = (form.getfirst("app_name") or "").strip()
+            version = (form.getfirst("version") or "").strip()
+            upload = form["bundle"] if "bundle" in form else None
+
+            if not app_name:
+                raise ValueError("App name is required.")
+            if not version:
+                raise ValueError("Version is required.")
+            if upload is None or not getattr(upload, "filename", ""):
+                raise ValueError("Please attach a .zip, .tar, .tar.gz, or .tgz archive.")
+
+            filename = Path(upload.filename).name
+            archive_path = archives_root / filename
+            archive_path.write_bytes(upload.file.read())
+
+            extracted = unpack_archive(archive_path, extracted_root)
+            result = scan_path(extracted, app_name=app_name, version=version)
+            storage = Storage(db_file)
+            try:
+                run_id = storage.save_scan_run(result)
+            finally:
+                storage.close()
+
+            self._redirect_with_status(
+                "success",
+                f"Scan saved: {app_name} {version}, methods={len(result['methods'])}, run_id={run_id}",
+            )
+
+        def _redirect_with_status(self, level: str, message: str) -> None:
+            query = urlencode({"scan_status": level, "scan_message": message})
+            self.send_response(303)
+            self.send_header("Location", f"/?{query}")
+            self.end_headers()
 
     return DashboardHandler
 
@@ -179,13 +253,14 @@ def _load_dashboard_data(db_path: str, limit: int, min_score: int) -> dict:
     }
 
 
-def _render_page(db_path: str, limit: int, min_score: int) -> str:
+def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str] | None = None) -> str:
     payload = _load_dashboard_data(db_path, limit=limit, min_score=min_score)
     cards = "\n".join(_render_card(item) for item in payload["findings"]) or "<p>No findings yet.</p>"
     baseline_rows = "\n".join(_render_baseline_row(item) for item in payload["baselines"]) or "<tr><td colspan='5'>No baseline data yet.</td></tr>"
     run_cards = "\n".join(_render_run_card(item) for item in payload["scan_runs"][:12]) or "<p>No scans yet.</p>"
     hit_rows = "\n".join(_render_hit_row(item) for item in payload["scan_hits"][:40]) or "<tr><td colspan='5'>No scan hits yet.</td></tr>"
     summary = payload["summary"]
+    flash_html = _render_flash(flash or {})
 
     return f"""<!doctype html>
 <html lang="ru">
@@ -226,12 +301,18 @@ def _render_page(db_path: str, limit: int, min_score: int) -> str:
     .controls {{ display:flex; flex-wrap:wrap; gap:14px; margin-top:18px; }}
     label {{ display:grid; gap:6px; color: var(--muted); font-size:.92rem; }}
     input {{ width:120px; padding:10px 12px; border-radius:10px; border:1px solid var(--border); }}
+    input[type="file"] {{ width:100%; padding:10px 0; border:0; background:transparent; }}
     button {{ border:0; border-radius:999px; padding:11px 18px; background: var(--accent); color: white; cursor:pointer; }}
     .grid {{ display:grid; grid-template-columns: 1.2fr .8fr; gap:18px; margin-top:18px; }}
     .stack {{ display:grid; gap:18px; }}
     .panel {{ padding:18px; overflow:hidden; }}
     .panel h2 {{ margin:0 0 10px; font-size:1.4rem; }}
     .panel p.meta {{ margin:0 0 14px; color:var(--muted); }}
+    .flash {{ margin-top:18px; padding:14px 16px; border-radius:16px; border:1px solid var(--border); }}
+    .flash.success {{ background:#eef6eb; color:#234326; border-color:#c7dec7; }}
+    .flash.error {{ background:#fff0eb; color:#7b2d1f; border-color:#f0c9bd; }}
+    .upload-form {{ display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 1.3fr auto; gap:12px; align-items:end; margin-top:18px; }}
+    .upload-form .wide {{ grid-column: span 2; }}
     .list {{ display:grid; gap:14px; }}
     .card {{ padding:16px; }}
     .eyebrow {{ display:flex; justify-content:space-between; gap:12px; color:var(--muted); font-size:.9rem; margin-bottom:8px; }}
@@ -245,11 +326,13 @@ def _render_page(db_path: str, limit: int, min_score: int) -> str:
     th, td {{ text-align:left; padding:10px 8px; border-bottom:1px solid var(--border); vertical-align: top; }}
     th {{ color: var(--muted); font-weight:600; }}
     .mono {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.87rem; word-break: break-all; }}
-    @media (max-width: 980px) {{ .grid {{ grid-template-columns: 1fr; }} }}
+    @media (max-width: 980px) {{ .grid {{ grid-template-columns: 1fr; }} .upload-form {{ grid-template-columns: 1fr 1fr; }} .upload-form .wide {{ grid-column: span 2; }} }}
     @media (max-width: 640px) {{
       .wrap {{ padding:16px 12px 28px; }}
       .hero, .panel, .card {{ border-radius:18px; }}
       input {{ width:100%; }}
+      .upload-form {{ grid-template-columns: 1fr; }}
+      .upload-form .wide {{ grid-column: auto; }}
     }}
   </style>
 </head>
@@ -269,6 +352,15 @@ def _render_page(db_path: str, limit: int, min_score: int) -> str:
         <label>Minimum score<input type="number" name="min_score" value="{min_score}" min="0" max="50"></label>
         <label>Rows<input type="number" name="limit" value="{limit}" min="1" max="200"></label>
         <button type="submit">Update View</button>
+      </form>
+      {flash_html}
+      <form class="upload-form" method="post" action="/scan-upload" enctype="multipart/form-data">
+        <label>App name<input type="text" name="app_name" placeholder="Yandex Browser" required></label>
+        <label>Version<input type="text" name="version" placeholder="25.4.1" required></label>
+        <label class="wide">Archive with decompiled sources
+          <input type="file" name="bundle" accept=".zip,.tar,.tar.gz,.tgz" required>
+        </label>
+        <button type="submit">Upload And Scan</button>
       </form>
     </section>
 
@@ -362,6 +454,16 @@ def _render_hit_row(item: dict) -> str:
         f"<td class='mono'>{file_part}</td>"
         f"<td class='mono'>{html.escape(item['snippet'])}</td></tr>"
     )
+
+
+def _render_flash(flash: dict[str, str]) -> str:
+    level = flash.get("level", "")
+    message = flash.get("message", "")
+    if not level or not message:
+        return ""
+    if level not in {"success", "error"}:
+        level = "success"
+    return f'<div class="flash {level}">{html.escape(message)}</div>'
 
 
 def _safe_int(raw: str, default: int, minimum: int, maximum: int) -> int:

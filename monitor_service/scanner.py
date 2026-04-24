@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 import re
+import tarfile
+import time
+import zipfile
 from pathlib import Path
 
 
@@ -111,6 +114,27 @@ def load_app_profiles(path: str | Path) -> dict:
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
+def unpack_archive(archive_path: str | Path, extract_root: str | Path) -> Path:
+    source = Path(archive_path).resolve()
+    target_root = Path(extract_root).resolve()
+    target_root.mkdir(parents=True, exist_ok=True)
+    target = target_root / f"{source.stem}-{int(time.time())}"
+    target.mkdir(parents=True, exist_ok=True)
+
+    suffixes = source.suffixes
+    if suffixes[-1:] == [".zip"]:
+        with zipfile.ZipFile(source) as bundle:
+            _extract_zip_safe(bundle, target)
+        return target
+
+    if suffixes[-2:] == [".tar", ".gz"] or suffixes[-1:] in ([".tgz"], [".tar"]):
+        with tarfile.open(source) as bundle:
+            _extract_tar_safe(bundle, target)
+        return target
+
+    raise ValueError(f"Unsupported archive format: {source.name}")
+
+
 def _iter_candidate_files(base: Path):
     if base.is_file():
         yield base
@@ -120,3 +144,21 @@ def _iter_candidate_files(base: Path):
             continue
         if path.suffix.lower() in SCAN_FILE_SUFFIXES:
             yield path
+
+
+def _extract_zip_safe(bundle: zipfile.ZipFile, target: Path) -> None:
+    for member in bundle.infolist():
+        member_path = target / member.filename
+        _ensure_relative(member_path, target)
+    bundle.extractall(target)
+
+
+def _extract_tar_safe(bundle: tarfile.TarFile, target: Path) -> None:
+    for member in bundle.getmembers():
+        member_path = target / member.name
+        _ensure_relative(member_path, target)
+    bundle.extractall(target)
+
+
+def _ensure_relative(candidate: Path, target: Path) -> None:
+    candidate.resolve().relative_to(target.resolve())
