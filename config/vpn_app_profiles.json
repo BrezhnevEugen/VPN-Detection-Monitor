@@ -1,0 +1,160 @@
+{
+  "source_url": "https://habr.com/ru/articles/1026162/",
+  "baseline_date": "2026-04-01",
+  "apps": [
+    {
+      "app_name": "Yandex Browser",
+      "rank_by_methods": 1,
+      "methods_count": 4,
+      "methods": ["TRANSPORT_VPN", "/proc/net/tcp", "tun0", "Tor detect", "server flag"],
+      "notes": "TRANSPORT_VPN + /proc/net/tcp + tun0 + detekt Tor + signal na server"
+    },
+    {
+      "app_name": "Yandex Maps",
+      "rank_by_methods": 2,
+      "methods_count": 4,
+      "methods": ["TRANSPORT_VPN", "/proc/net/tcp", "tun0", "proxy"],
+      "notes": "TRANSPORT_VPN + /proc/net/tcp + tun0 + proxy"
+    },
+    {
+      "app_name": "VKontakte",
+      "rank_by_methods": 3,
+      "methods_count": 3,
+      "methods": ["TRANSPORT_VPN", "tun0", "proxy", "server flag"],
+      "notes": "TRANSPORT_VPN + tun0 + proxy + signal na server"
+    },
+    {
+      "app_name": "My MTS",
+      "rank_by_methods": 4,
+      "methods_count": 3,
+      "methods": ["TRANSPORT_VPN", "tun0", "proxy", "server flag"],
+      "notes": "TRANSPORT_VPN + tun0 + proxy + signal na server"
+    },
+    {
+      "app_name": "Sberbank Online",
+      "rank_by_methods": 5,
+      "methods_count": 3,
+      "methods": ["TRANSPORT_VPN", "tun0", "proxy", "server flag"],
+      "notes": "setVpn() v clickstream"
+    },
+    {
+      "app_name": "T-Bank",
+      "rank_by_methods": 6,
+      "methods_count": 3,
+      "methods": ["/proc/net/tcp", "tun0", "server flag"],
+      "notes": "isVpnConnected v fingerprint"
+    },
+    {
+      "app_name": "VK Video",
+      "rank_by_methods": 7,
+      "methods_count": 2,
+      "methods": ["TRANSPORT_VPN", "proxy", "server flag"],
+      "notes": "TRANSPORT_VPN + proxy + signal na server"
+    },
+    {
+      "app_name": "Wildberries",
+      "rank_by_methods": 8,
+      "methods_count": 2,
+      "methods": ["tun0", "proxy"],
+      "notes": "tun0 + proxy"
+    },
+    {
+      "app_name": "Kinopoisk",
+      "rank_by_methods": 9,
+      "methods_count": 2,
+      "methods": ["TRANSPORT_VPN", "tun0", "server flag"],
+      "notes": "TRANSPORT_VPN + tun0 + signal na server"
+    },
+    {
+      "app_name": "Ozon",
+      "rank_by_methods": 10,
+      "methods_count": 2,
+      "methods": ["TRANSPORT_VPN", "proxy", "server flag"],
+      "notes": "TRANSPORT_VPN + proxy + signal na server"
+    },
+    {
+      "app_name": "Samokat",
+      "rank_by_methods": 11,
+      "methods_count": 2,
+      "methods": ["TRANSPORT_VPN", "tun0", "server flag"],
+      "notes": "TRANSPORT_VPN + tun0 + signal na server"
+    },
+    {
+      "app_name": "RuStore",
+      "rank_by_methods": 12,
+      "methods_count": 2,
+      "methods": ["TRANSPORT_VPN", "proxy", "server flag"],
+      "notes": "TRANSPORT_VPN + proxy + signal na server"
+    },
+    {
+      "app_name": "VTB Online",
+      "rank_by_methods": 13,
+      "methods_count": 2,
+      "methods": ["TRANSPORT_VPN", "tun0", "server flag"],
+      "notes": "is_vpn_on v NetworkSettingsDto"
+    },
+    {
+      "app_name": "Yandex Music",
+      "rank_by_methods": 14,
+      "methods_count": 2,
+      "methods": ["/proc/net/tcp", "tun0"],
+      "notes": "/proc/net/tcp + tun0"
+    },
+    {
+      "app_name": "VK Music",
+      "rank_by_methods": 15,
+      "methods_count": 2,
+      "methods": ["TRANSPORT_VPN", "tun0", "server flag"],
+      "notes": "is_vpn v kazhdom stat-sobytii"
+    },
+    {
+      "app_name": "Avito",
+      "rank_by_methods": 16,
+      "methods_count": 1,
+      "methods": ["TRANSPORT_VPN", "server flag"],
+      "notes": "TRANSPORT_VPN + signal na server"
+    },
+    {
+      "app_name": "Alfa-Bank",
+      "rank_by_methods": 17,
+      "methods_count": 1,
+      "methods": ["proxy", "server flag"],
+      "notes": "proxy + signal na server"
+    },
+    {
+      "app_name": "2GIS",
+      "rank_by_methods": 18,
+      "methods_count": 1,
+      "methods": ["TRANSPORT_VPN", "server flag"],
+      "notes": "TRANSPORT_VPN + signal na server"
+    },
+    {
+      "app_name": "MegaMarket",
+      "rank_by_methods": 19,
+      "methods_count": 1,
+      "methods": ["tun0", "server flag"],
+      "notes": "tun0 + signal na server"
+    },
+    {
+      "app_name": "Odnoklassniki",
+      "rank_by_methods": 20,
+      "methods_count": 1,
+      "methods": ["TRANSPORT_VPN", "server flag"],
+      "notes": "TRANSPORT_VPN + signal na server"
+    },
+    {
+      "app_name": "MAX",
+      "rank_by_methods": 21,
+      "methods_count": 1,
+      "methods": ["TRANSPORT_VPN", "server flag"],
+      "notes": "TRANSPORT_VPN + signal na server"
+    },
+    {
+      "app_name": "Rutube",
+      "rank_by_methods": 22,
+      "methods_count": 1,
+      "methods": ["tun0", "server flag"],
+      "notes": "VpnStatusResponse API"
+    }
+  ]
+}

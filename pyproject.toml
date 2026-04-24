@@ -1,0 +1,11 @@
+[project]
+name = "tech-state-monitor"
+version = "0.1.0"
+description = "Regular monitor for signals about ties between major tech companies and the state"
+requires-python = ">=3.10"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
