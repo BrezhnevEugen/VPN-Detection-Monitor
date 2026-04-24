@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
 import tarfile
 import time
 import zipfile
@@ -215,6 +217,37 @@ def unpack_archive(archive_path: str | Path, extract_root: str | Path) -> Path:
         return target
 
     raise ValueError(f"Unsupported archive format: {source.name}")
+
+
+def prepare_scan_target(upload_path: str | Path, work_root: str | Path) -> Path:
+    source = Path(upload_path).resolve()
+    if source.suffix.lower() == ".apk":
+        return decode_apk(source, work_root)
+    return unpack_archive(source, work_root)
+
+
+def decode_apk(apk_path: str | Path, output_root: str | Path) -> Path:
+    apk = Path(apk_path).resolve()
+    output_base = Path(output_root).resolve()
+    output_base.mkdir(parents=True, exist_ok=True)
+    target = output_base / f"{apk.stem}-decoded-{int(time.time())}"
+
+    apktool = shutil.which("apktool")
+    if not apktool:
+        raise ValueError("APK upload requires apktool on the server. Please install it first.")
+
+    try:
+        subprocess.run(
+            [apktool, "d", "-f", "-o", str(target), str(apk)],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        stderr = (exc.stderr or "").strip()
+        raise ValueError(f"APK decode failed: {stderr or 'apktool error'}") from exc
+    return target
 
 
 def _iter_candidate_files(base: Path):

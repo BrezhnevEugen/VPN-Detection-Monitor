@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse
 
-from monitor_service.scanner import scan_path, unpack_archive
+from monitor_service.scanner import prepare_scan_target, scan_path
 from monitor_service.storage import Storage
 
 
@@ -137,15 +137,15 @@ def _build_handler(db_path: str):
             if not version:
                 raise ValueError("Version is required.")
             if upload is None or not getattr(upload, "filename", ""):
-                raise ValueError("Please attach a .zip, .tar, .tar.gz, or .tgz archive.")
+                raise ValueError("Please attach a .apk, .zip, .tar, .tar.gz, or .tgz file.")
 
             filename = Path(upload.filename).name
             if not _is_allowed_archive(filename):
-                raise ValueError("Unsupported file type. Allowed: .zip, .tar, .tar.gz, .tgz.")
+                raise ValueError("Unsupported file type. Allowed: .apk, .zip, .tar, .tar.gz, .tgz.")
             archive_path = archives_root / filename
             archive_path.write_bytes(upload.file.read())
 
-            extracted = unpack_archive(archive_path, extracted_root)
+            extracted = prepare_scan_target(archive_path, extracted_root)
             result = scan_path(extracted, app_name=app_name, version=version)
             storage = Storage(db_file)
             try:
@@ -413,11 +413,11 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
             <input id="version" type="text" name="version" placeholder="25.4.1" required>
           </div>
           <div class="upload-field">
-            <label for="bundle">Archive with decompiled sources</label>
+            <label for="bundle">APK or archive with decompiled sources</label>
             <div class="file-shell">
-              <input id="bundle" type="file" name="bundle" accept=".zip,.tar,.tar.gz,.tgz" required>
+              <input id="bundle" type="file" name="bundle" accept=".apk,.zip,.tar,.tar.gz,.tgz" required>
             </div>
-            <div class="file-meta">Allowed: .zip, .tar, .tar.gz, .tgz</div>
+            <div class="file-meta">Allowed: .apk, .zip, .tar, .tar.gz, .tgz</div>
           </div>
           <button class="upload-submit" type="submit">Upload And Scan</button>
         </form>
@@ -466,7 +466,7 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
       const versionInput = document.getElementById('version');
       const bundleInput = document.getElementById('bundle');
       const errorsBox = document.getElementById('upload-errors');
-      const allowed = ['.zip', '.tar', '.tar.gz', '.tgz'];
+      const allowed = ['.apk', '.zip', '.tar', '.tar.gz', '.tgz'];
 
       function showErrors(messages) {{
         if (!messages.length) {{
@@ -488,9 +488,9 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
         if (!appInput.value.trim()) messages.push('Заполните поле App name.');
         if (!versionInput.value.trim()) messages.push('Заполните поле Version.');
         if (!bundleInput.files || !bundleInput.files.length) {{
-          messages.push('Прикрепите архив с декомпилированными исходниками.');
+          messages.push('Прикрепите APK или архив с декомпилированными исходниками.');
         }} else if (!validExtension(bundleInput.files[0].name)) {{
-          messages.push('Недопустимое расширение файла. Разрешены: .zip, .tar, .tar.gz, .tgz.');
+          messages.push('Недопустимое расширение файла. Разрешены: .apk, .zip, .tar, .tar.gz, .tgz.');
         }}
         if (messages.length) {{
           event.preventDefault();
@@ -635,7 +635,7 @@ def _slugify(value: str) -> str:
 
 def _is_allowed_archive(filename: str) -> bool:
     lower = filename.lower()
-    return any(lower.endswith(ext) for ext in (".zip", ".tar", ".tar.gz", ".tgz"))
+    return any(lower.endswith(ext) for ext in (".apk", ".zip", ".tar", ".tar.gz", ".tgz"))
 
 
 def _safe_int(raw: str, default: int, minimum: int, maximum: int) -> int:
