@@ -227,5 +227,102 @@ class Storage:
             (limit,),
         ).fetchall()
 
+    def scan_report(self, app_name: str, version: str | None = None) -> dict | None:
+        if version:
+            run = self.conn.execute(
+                """
+                SELECT id, app_name, version, scan_target, scanned_at, method_count, methods_json, summary_json
+                FROM scan_runs
+                WHERE app_name = ? AND version = ?
+                ORDER BY scanned_at DESC
+                LIMIT 1
+                """,
+                (app_name, version),
+            ).fetchone()
+        else:
+            run = self.conn.execute(
+                """
+                SELECT id, app_name, version, scan_target, scanned_at, method_count, methods_json, summary_json
+                FROM scan_runs
+                WHERE app_name = ?
+                ORDER BY scanned_at DESC
+                LIMIT 1
+                """,
+                (app_name,),
+            ).fetchone()
+        if run is None:
+            return None
+
+        baseline = self.conn.execute(
+            """
+            SELECT app_name, rank_by_methods, methods_count, methods_json, notes, baseline_date
+            FROM app_baselines
+            WHERE lower(app_name) = lower(?)
+            LIMIT 1
+            """,
+            (app_name,),
+        ).fetchone()
+        history = self.conn.execute(
+            """
+            SELECT app_name, version, scanned_at, method_count, methods_json, summary_json
+            FROM scan_runs
+            WHERE app_name = ?
+            ORDER BY scanned_at DESC
+            LIMIT 10
+            """,
+            (app_name,),
+        ).fetchall()
+        hits = self.conn.execute(
+            """
+            SELECT method_id, file_path, line_no, snippet
+            FROM scan_hits
+            WHERE run_id = ?
+            ORDER BY method_id ASC, file_path ASC, line_no ASC
+            """,
+            (run["id"],),
+        ).fetchall()
+
+        return {
+            "run": {
+                "app_name": run["app_name"],
+                "version": run["version"],
+                "scan_target": run["scan_target"],
+                "scanned_at": run["scanned_at"],
+                "method_count": run["method_count"],
+                "methods": json.loads(run["methods_json"]),
+                "summary": json.loads(run["summary_json"]),
+            },
+            "baseline": None
+            if baseline is None
+            else {
+                "app_name": baseline["app_name"],
+                "rank_by_methods": baseline["rank_by_methods"],
+                "methods_count": baseline["methods_count"],
+                "methods": json.loads(baseline["methods_json"]),
+                "notes": baseline["notes"],
+                "baseline_date": baseline["baseline_date"],
+            },
+            "history": [
+                {
+                    "app_name": row["app_name"],
+                    "version": row["version"],
+                    "scanned_at": row["scanned_at"],
+                    "method_count": row["method_count"],
+                    "methods": json.loads(row["methods_json"]),
+                    "summary": json.loads(row["summary_json"]),
+                }
+                for row in history
+            ],
+            "hits": [
+                {
+                    "method_id": row["method_id"],
+                    "file_path": row["file_path"],
+                    "line_no": row["line_no"],
+                    "snippet": row["snippet"],
+                }
+                for row in hits
+            ],
+        }
+
     def close(self) -> None:
         self.conn.close()

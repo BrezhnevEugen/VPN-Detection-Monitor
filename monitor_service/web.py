@@ -13,6 +13,14 @@ from monitor_service.storage import Storage
 
 
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
+LEGACY_METHOD_DETAILS = {
+    "tun0": {"label": "Tun interface probe", "category": "interface-probe", "severity": "high"},
+    "transport_vpn": {"label": "Android VPN transport check", "category": "network-api", "severity": "high"},
+    "proc_net_tcp": {"label": "Low-level proc/net socket probe", "category": "filesystem-probe", "severity": "high"},
+    "vpn_flag_to_server": {"label": "VPN flag sent to backend or analytics", "category": "telemetry", "severity": "critical"},
+    "proxy": {"label": "Proxy or SOCKS detection", "category": "proxy-check", "severity": "medium"},
+    "tor": {"label": "Tor or Orbot signature", "category": "anonymity-check", "severity": "medium"},
+}
 
 def run_dashboard(db_path: str, host: str = "127.0.0.1", port: int = 8000) -> None:
     server = ThreadingHTTPServer((host, port), _build_handler(db_path))
@@ -47,6 +55,31 @@ def _build_handler(db_path: str):
             if parsed.path == "/api/findings":
                 payload = _load_dashboard_data(db_file, limit=limit, min_score=min_score)
                 self._send_json(payload)
+                return
+
+            if parsed.path == "/report":
+                app_name = (query.get("app", [""])[0] or "").strip()
+                version = (query.get("version", [""])[0] or "").strip() or None
+                if not app_name:
+                    self.send_error(400, "Missing app parameter")
+                    return
+                storage = Storage(db_file)
+                try:
+                    report = storage.scan_report(app_name, version=version)
+                finally:
+                    storage.close()
+                if report is None:
+                    self.send_error(404, "Report not found")
+                    return
+                body = _render_report_markdown(report)
+                encoded = body.encode("utf-8")
+                filename = f"{_slugify(app_name)}-{_slugify(version or report['run']['version'])}.md"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/markdown; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
                 return
 
             self.send_error(404, "Not found")
@@ -322,6 +355,8 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
     .summary {{ color:var(--muted); margin:0 0 12px; line-height:1.45; }}
     .tags {{ display:flex; flex-wrap:wrap; gap:8px; }}
     .tags span {{ padding:6px 10px; border-radius:999px; background:#f3eee6; color:#51493f; font-size:.86rem; }}
+    .actions {{ display:flex; justify-content:flex-end; margin-top:12px; }}
+    .actions a {{ display:inline-flex; align-items:center; padding:8px 12px; border-radius:999px; background:#f1ece2; text-decoration:none; }}
     table {{ width:100%; border-collapse: collapse; font-size:.94rem; }}
     th, td {{ text-align:left; padding:10px 8px; border-bottom:1px solid var(--border); vertical-align: top; }}
     th {{ color: var(--muted); font-weight:600; }}
@@ -432,16 +467,24 @@ def _render_baseline_row(item: dict) -> str:
 
 def _render_run_card(item: dict) -> str:
     methods = "".join(f"<span>{html.escape(method)}</span>" for method in item["methods"])
+    categories = item["summary"].get("categories", {})
+    severities = item["summary"].get("severity_counts", {})
+    extra_tags = "".join(
+        f"<span>{html.escape(name)}:{value}</span>" for name, value in {**categories, **severities}.items()
+    )
     target = html.escape(item["scan_target"])
     scanned_at = html.escape(item["scanned_at"])
     files_scanned = item["summary"].get("files_scanned", 0)
     hits_count = item["summary"].get("hits_count", 0)
+    report_query = urlencode({"app": item["app_name"], "version": item["version"]})
     return f"""
     <article class="card">
       <div class="eyebrow"><span>{html.escape(item["app_name"])} {html.escape(item["version"])}</span><span class="badge">{item["method_count"]} methods</span></div>
       <p class="summary">Scanned: <span class="mono">{target}</span></p>
       <div class="tags">{methods}</div>
+      <div class="tags" style="margin-top:8px">{extra_tags}</div>
       <div class="eyebrow" style="margin-top:10px"><span>{files_scanned} files</span><span>{hits_count} hits</span><span>{scanned_at}</span></div>
+      <div class="actions"><a href="/report?{report_query}">Export report</a></div>
     </article>"""
 
 
@@ -464,6 +507,61 @@ def _render_flash(flash: dict[str, str]) -> str:
     if level not in {"success", "error"}:
         level = "success"
     return f'<div class="flash {level}">{html.escape(message)}</div>'
+
+
+def _render_report_markdown(report: dict) -> str:
+    run = report["run"]
+    baseline = report["baseline"]
+    history = report["history"]
+    hits = report["hits"]
+    summary = run["summary"]
+    lines = [
+        f"# Scan report: {run['app_name']} {run['version']}",
+        "",
+        f"- Scanned at: {run['scanned_at']}",
+        f"- Scan target: `{run['scan_target']}`",
+        f"- Methods found: {run['method_count']}",
+        f"- Files scanned: {summary.get('files_scanned', 0)}",
+        f"- Hits: {summary.get('hits_count', 0)}",
+        "",
+        "## Methods",
+    ]
+    for method in run["methods"]:
+        details = summary.get("method_details", {}).get(method, LEGACY_METHOD_DETAILS.get(method, {}))
+        label = details.get("label", method)
+        category = details.get("category", "n/a")
+        severity = details.get("severity", "n/a")
+        lines.append(f"- `{method}`: {label} (`category={category}`, `severity={severity}`)")
+
+    if baseline is not None:
+        lines.extend(
+            [
+                "",
+                "## Baseline comparison",
+                f"- Baseline date: {baseline['baseline_date']}",
+                f"- Baseline methods count: {baseline['methods_count']}",
+                f"- Baseline methods: {', '.join(baseline['methods'])}",
+                f"- Notes: {baseline['notes']}",
+            ]
+        )
+
+    lines.extend(["", "## Recent history"])
+    for item in history:
+        lines.append(
+            f"- {item['version']} at {item['scanned_at']}: {item['method_count']} methods ({', '.join(item['methods'])})"
+        )
+
+    lines.extend(["", "## Hits"])
+    for hit in hits:
+        location = f"{hit['file_path']}:{hit['line_no'] or '?'}"
+        lines.append(f"- `{hit['method_id']}` at `{location}` -> `{hit['snippet']}`")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _slugify(value: str) -> str:
+    slug = "".join(ch.lower() if ch.isalnum() else "-" for ch in value)
+    return "-".join(part for part in slug.split("-") if part) or "report"
 
 
 def _safe_int(raw: str, default: int, minimum: int, maximum: int) -> int:

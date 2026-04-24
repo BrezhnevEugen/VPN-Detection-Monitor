@@ -21,42 +21,114 @@ SCAN_FILE_SUFFIXES = {
 }
 
 
-METHOD_PATTERNS = {
-    "transport_vpn": [
-        r"TRANSPORT_VPN",
-        r"hasTransport\s*\(\s*NetworkCapabilities\.TRANSPORT_VPN",
-        r"NetworkCapabilities[^\\n]{0,80}TRANSPORT_VPN",
-    ],
-    "tun0": [
-        r"\btun0\b",
-        r"\bvpn0\b",
-        r"/sys/class/net/tun0",
-    ],
-    "proc_net_tcp": [
-        r"/proc/net/tcp",
-        r"/proc/net/tcp6",
-        r"proc/net/tcp:27042",
-    ],
-    "proxy": [
-        r"ProxyInfo",
-        r"java\.net\.Proxy",
-        r"http\.proxyHost",
-        r"socksProxyHost",
-        r"isProxySet",
-    ],
-    "tor": [
-        r"\bTor\b",
-        r"Orbot",
-        r"9050",
-        r"9150",
-    ],
-    "vpn_flag_to_server": [
-        r"is_vpn",
-        r"vpn_enabled",
-        r"setVpn",
-        r"VpnStatusResponse",
-        r"isVpnConnected",
-    ],
+METHOD_DEFINITIONS = {
+    "transport_vpn": {
+        "label": "Android VPN transport check",
+        "category": "network-api",
+        "severity": "high",
+        "patterns": [
+            r"TRANSPORT_VPN",
+            r"hasTransport\s*\(\s*NetworkCapabilities\.TRANSPORT_VPN",
+            r"NetworkCapabilities[^\\n]{0,80}TRANSPORT_VPN",
+            r"ConnectivityManager[^\\n]{0,80}getNetworkCapabilities",
+        ],
+    },
+    "vpn_service_probe": {
+        "label": "VpnService or VPN capability probe",
+        "category": "network-api",
+        "severity": "high",
+        "patterns": [
+            r"\bVpnService\b",
+            r"prepareVpn",
+            r"isVpnActive",
+            r"getActiveNetwork",
+            r"activeNetworkInfo",
+        ],
+    },
+    "tun_interface": {
+        "label": "Tun/WireGuard/OpenVPN interface probe",
+        "category": "interface-probe",
+        "severity": "high",
+        "patterns": [
+            r"\btun0\b",
+            r"\bvpn0\b",
+            r"\butun[0-9]*\b",
+            r"\bppp0\b",
+            r"\bipsec[0-9]*\b",
+            r"\bwg[0-9]*\b",
+            r"wireguard",
+            r"openvpn",
+            r"/sys/class/net/tun0",
+            r"NetworkInterface\.getNetworkInterfaces",
+        ],
+    },
+    "proc_net_tcp": {
+        "label": "Low-level proc/net socket probe",
+        "category": "filesystem-probe",
+        "severity": "high",
+        "patterns": [
+            r"/proc/net/tcp",
+            r"/proc/net/tcp6",
+            r"/proc/net/route",
+            r"proc/net/tcp:27042",
+            r"proc/net",
+        ],
+    },
+    "proxy": {
+        "label": "Proxy or SOCKS detection",
+        "category": "proxy-check",
+        "severity": "medium",
+        "patterns": [
+            r"ProxyInfo",
+            r"java\.net\.Proxy",
+            r"http\.proxyHost",
+            r"https\.proxyHost",
+            r"socksProxyHost",
+            r"isProxySet",
+            r"getDefaultProxy",
+            r"ProxySelector",
+        ],
+    },
+    "tor": {
+        "label": "Tor or Orbot signature",
+        "category": "anonymity-check",
+        "severity": "medium",
+        "patterns": [
+            r"\bTor\b",
+            r"Orbot",
+            r"9050",
+            r"9150",
+        ],
+    },
+    "vpn_flag_to_server": {
+        "label": "VPN flag sent to backend or analytics",
+        "category": "telemetry",
+        "severity": "critical",
+        "patterns": [
+            r"is_vpn",
+            r"vpn_enabled",
+            r"setVpn",
+            r"VpnStatusResponse",
+            r"isVpnConnected",
+            r"vpnStatus",
+            r"vpnDetected",
+            r"vpn_state",
+            r"proxy_enabled",
+        ],
+    },
+    "dns_or_ip_telemetry": {
+        "label": "DNS/IP telemetry tied to routing checks",
+        "category": "telemetry",
+        "severity": "medium",
+        "patterns": [
+            r"getByName",
+            r"getHostAddress",
+            r"publicIp",
+            r"geoip",
+            r"countryCode",
+            r"exitNode",
+        ],
+    },
 }
 
 
@@ -77,8 +149,8 @@ def scan_path(scan_target: str | Path, app_name: str, version: str) -> dict:
             continue
 
         lines = text.splitlines()
-        for method_id, patterns in METHOD_PATTERNS.items():
-            for pattern in patterns:
+        for method_id, metadata in METHOD_DEFINITIONS.items():
+            for pattern in metadata["patterns"]:
                 regex = re.compile(pattern, flags=re.IGNORECASE)
                 for index, line in enumerate(lines, start=1):
                     if not regex.search(line):
@@ -106,6 +178,16 @@ def scan_path(scan_target: str | Path, app_name: str, version: str) -> dict:
         "summary": {
             "files_scanned": files_scanned,
             "hits_count": len(hits),
+            "categories": _count_categories(found_methods),
+            "severity_counts": _count_severities(found_methods),
+            "method_details": {
+                method_id: {
+                    "label": METHOD_DEFINITIONS[method_id]["label"],
+                    "category": METHOD_DEFINITIONS[method_id]["category"],
+                    "severity": METHOD_DEFINITIONS[method_id]["severity"],
+                }
+                for method_id in sorted(found_methods)
+            },
         },
     }
 
@@ -162,3 +244,19 @@ def _extract_tar_safe(bundle: tarfile.TarFile, target: Path) -> None:
 
 def _ensure_relative(candidate: Path, target: Path) -> None:
     candidate.resolve().relative_to(target.resolve())
+
+
+def _count_categories(methods: set[str]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for method_id in methods:
+        category = METHOD_DEFINITIONS[method_id]["category"]
+        counts[category] = counts.get(category, 0) + 1
+    return counts
+
+
+def _count_severities(methods: set[str]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for method_id in methods:
+        severity = METHOD_DEFINITIONS[method_id]["severity"]
+        counts[severity] = counts.get(severity, 0) + 1
+    return counts
