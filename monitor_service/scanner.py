@@ -8,6 +8,7 @@ import tarfile
 import time
 import zipfile
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 
 SCAN_FILE_SUFFIXES = {
@@ -250,6 +251,52 @@ def decode_apk(apk_path: str | Path, output_root: str | Path) -> Path:
     return target
 
 
+def infer_app_metadata(scan_target: str | Path, upload_name: str | None = None) -> dict[str, str]:
+    base = Path(scan_target).resolve()
+    manifest_path = base / "AndroidManifest.xml"
+    fallback_name = _humanize_name(upload_name or base.name)
+    metadata = {
+        "app_name": fallback_name,
+        "version": "unknown",
+        "package_name": "",
+    }
+    if not manifest_path.exists():
+        return metadata
+
+    try:
+        root = ET.fromstring(manifest_path.read_text(encoding="utf-8", errors="ignore"))
+    except ET.ParseError:
+        return metadata
+
+    android_ns = "{http://schemas.android.com/apk/res/android}"
+    package_name = root.attrib.get("package", "")
+    version_name = root.attrib.get(f"{android_ns}versionName", "") or root.attrib.get("versionName", "")
+    version_code = root.attrib.get(f"{android_ns}versionCode", "") or root.attrib.get("versionCode", "")
+    app_node = root.find("application")
+    label = ""
+    if app_node is not None:
+        label = app_node.attrib.get(f"{android_ns}label", "") or app_node.attrib.get("label", "")
+
+    if label.startswith("@string/"):
+        label_name = label.split("/", 1)[1]
+        resolved = _resolve_string_resource(base, label_name)
+        if resolved:
+            label = resolved
+
+    metadata["package_name"] = package_name
+    if label and not label.startswith("@"):
+        metadata["app_name"] = label.strip()
+    elif package_name:
+        metadata["app_name"] = _humanize_name(package_name.split(".")[-1])
+
+    if version_name:
+        metadata["version"] = version_name.strip()
+    elif version_code:
+        metadata["version"] = f"code-{version_code.strip()}"
+
+    return metadata
+
+
 def _iter_candidate_files(base: Path):
     if base.is_file():
         yield base
@@ -293,3 +340,28 @@ def _count_severities(methods: set[str]) -> dict[str, int]:
         severity = METHOD_DEFINITIONS[method_id]["severity"]
         counts[severity] = counts.get(severity, 0) + 1
     return counts
+
+
+def _resolve_string_resource(base: Path, name: str) -> str | None:
+    for candidate in [
+        base / "res" / "values" / "strings.xml",
+        base / "res" / "values-ru" / "strings.xml",
+        base / "res" / "values-en" / "strings.xml",
+    ]:
+        if not candidate.exists():
+            continue
+        try:
+            root = ET.fromstring(candidate.read_text(encoding="utf-8", errors="ignore"))
+        except ET.ParseError:
+            continue
+        for node in root.findall("string"):
+            if node.attrib.get("name") == name and node.text:
+                return node.text.strip()
+    return None
+
+
+def _humanize_name(raw: str) -> str:
+    name = Path(raw).stem
+    name = re.sub(r"[-_]+", " ", name)
+    name = re.sub(r"\s+", " ", name).strip()
+    return name or "Unknown app"

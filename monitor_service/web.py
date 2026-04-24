@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse
 
-from monitor_service.scanner import prepare_scan_target, scan_path
+from monitor_service.scanner import infer_app_metadata, prepare_scan_target, scan_path
 from monitor_service.storage import Storage
 
 
@@ -116,7 +116,7 @@ def _build_handler(db_path: str):
         def _handle_scan_upload(self) -> None:
             content_length = int(self.headers.get("Content-Length", "0") or "0")
             if content_length > MAX_UPLOAD_BYTES:
-                raise ValueError("Archive is too large. Limit is 200 MB.")
+                raise ValueError("APK is too large. Limit is 200 MB.")
 
             form = cgi.FieldStorage(
                 fp=self.rfile,
@@ -128,25 +128,20 @@ def _build_handler(db_path: str):
                 },
             )
 
-            app_name = (form.getfirst("app_name") or "").strip()
-            version = (form.getfirst("version") or "").strip()
             upload = form["bundle"] if "bundle" in form else None
 
-            if not app_name:
-                raise ValueError("App name is required.")
-            if not version:
-                raise ValueError("Version is required.")
             if upload is None or not getattr(upload, "filename", ""):
-                raise ValueError("Please attach a .apk, .zip, .tar, .tar.gz, or .tgz file.")
+                raise ValueError("Please attach an APK file.")
 
             filename = Path(upload.filename).name
             if not _is_allowed_archive(filename):
-                raise ValueError("Unsupported file type. Allowed: .apk, .zip, .tar, .tar.gz, .tgz.")
+                raise ValueError("Unsupported file type. Allowed: .apk.")
             archive_path = archives_root / filename
             archive_path.write_bytes(upload.file.read())
 
             extracted = prepare_scan_target(archive_path, extracted_root)
-            result = scan_path(extracted, app_name=app_name, version=version)
+            metadata = infer_app_metadata(extracted, upload_name=filename)
+            result = scan_path(extracted, app_name=metadata["app_name"], version=metadata["version"])
             storage = Storage(db_file)
             try:
                 run_id = storage.save_scan_run(result)
@@ -155,7 +150,7 @@ def _build_handler(db_path: str):
 
             self._redirect_with_status(
                 "success",
-                f"Scan saved: {app_name} {version}, methods={len(result['methods'])}, run_id={run_id}",
+                f"Scan saved: {metadata['app_name']} {metadata['version']}, methods={len(result['methods'])}, run_id={run_id}",
             )
 
         def _redirect_with_status(self, level: str, message: str) -> None:
@@ -402,22 +397,14 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
       </form>
       {flash_html}
       <section class="upload-panel">
-        <h2>Upload Bundle For Scan</h2>
+        <h2>Upload APK For Scan</h2>
         <form class="upload-form" id="scan-upload-form" method="post" action="/scan-upload" enctype="multipart/form-data" novalidate>
           <div class="upload-field">
-            <label for="app_name">App name</label>
-            <input id="app_name" type="text" name="app_name" placeholder="Yandex Browser" required>
-          </div>
-          <div class="upload-field">
-            <label for="version">Version</label>
-            <input id="version" type="text" name="version" placeholder="25.4.1" required>
-          </div>
-          <div class="upload-field">
-            <label for="bundle">APK or archive with decompiled sources</label>
+            <label for="bundle">APK file</label>
             <div class="file-shell">
-              <input id="bundle" type="file" name="bundle" accept=".apk,.zip,.tar,.tar.gz,.tgz" required>
+              <input id="bundle" type="file" name="bundle" accept=".apk" required>
             </div>
-            <div class="file-meta">Allowed: .apk, .zip, .tar, .tar.gz, .tgz</div>
+            <div class="file-meta">Название приложения и версия извлекаются автоматически из APK.</div>
           </div>
           <button class="upload-submit" type="submit">Upload And Scan</button>
         </form>
@@ -462,11 +449,9 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
     (() => {{
       const form = document.getElementById('scan-upload-form');
       if (!form) return;
-      const appInput = document.getElementById('app_name');
-      const versionInput = document.getElementById('version');
       const bundleInput = document.getElementById('bundle');
       const errorsBox = document.getElementById('upload-errors');
-      const allowed = ['.apk', '.zip', '.tar', '.tar.gz', '.tgz'];
+      const allowed = ['.apk'];
 
       function showErrors(messages) {{
         if (!messages.length) {{
@@ -485,12 +470,10 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
 
       form.addEventListener('submit', (event) => {{
         const messages = [];
-        if (!appInput.value.trim()) messages.push('Заполните поле App name.');
-        if (!versionInput.value.trim()) messages.push('Заполните поле Version.');
         if (!bundleInput.files || !bundleInput.files.length) {{
-          messages.push('Прикрепите APK или архив с декомпилированными исходниками.');
+          messages.push('Прикрепите APK-файл.');
         }} else if (!validExtension(bundleInput.files[0].name)) {{
-          messages.push('Недопустимое расширение файла. Разрешены: .apk, .zip, .tar, .tar.gz, .tgz.');
+          messages.push('Недопустимое расширение файла. Разрешено: .apk.');
         }}
         if (messages.length) {{
           event.preventDefault();
@@ -635,7 +618,7 @@ def _slugify(value: str) -> str:
 
 def _is_allowed_archive(filename: str) -> bool:
     lower = filename.lower()
-    return any(lower.endswith(ext) for ext in (".apk", ".zip", ".tar", ".tar.gz", ".tgz"))
+    return lower.endswith(".apk")
 
 
 def _safe_int(raw: str, default: int, minimum: int, maximum: int) -> int:
