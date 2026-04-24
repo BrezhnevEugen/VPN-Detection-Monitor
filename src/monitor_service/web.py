@@ -403,7 +403,6 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
       {flash_html}
       <section class="upload-panel">
         <h2>Upload Bundle For Scan</h2>
-        <p>Загрузите архив с результатом `jadx` или `apktool`. Форма проверяет заполнение и допустимые расширения ещё до отправки.</p>
         <form class="upload-form" id="scan-upload-form" method="post" action="/scan-upload" enctype="multipart/form-data" novalidate>
           <div class="upload-field">
             <label for="app_name">App name</label>
