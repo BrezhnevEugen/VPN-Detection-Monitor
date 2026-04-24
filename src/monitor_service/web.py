@@ -412,7 +412,6 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
             <div class="file-shell">
               <input id="bundle" type="file" name="bundle" accept=".apk" required>
             </div>
-            <div class="file-meta">Название приложения и версия извлекаются автоматически из APK.</div>
           </div>
           <button class="upload-submit" type="submit">Upload And Scan</button>
         </form>
