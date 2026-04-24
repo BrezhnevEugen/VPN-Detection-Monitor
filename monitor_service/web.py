@@ -542,6 +542,8 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
     .tags span {{ padding:6px 10px; border-radius:999px; background:#f3eee6; color:#51493f; font-size:.86rem; }}
     .actions {{ display:flex; justify-content:flex-end; margin-top:12px; }}
     .actions a {{ display:inline-flex; align-items:center; padding:8px 12px; border-radius:999px; background:#f1ece2; text-decoration:none; }}
+    .wide-panel {{ margin-top:18px; }}
+    .table-wrap {{ overflow-x:auto; }}
     table {{ width:100%; border-collapse: collapse; font-size:.94rem; }}
     th, td {{ text-align:left; padding:10px 8px; border-bottom:1px solid var(--border); vertical-align: top; }}
     th {{ color: var(--muted); font-weight:600; }}
@@ -617,14 +619,16 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
           <p class="meta">{html.escape(text["scan_dynamics_meta"])}</p>
           <div class="list">{run_cards}</div>
         </section>
-        <section class="panel">
-          <h2>{html.escape(text["where_found"])}</h2>
-          <p class="meta">{html.escape(text["where_found_meta"])}</p>
-          <table>
-            <thead><tr><th>{html.escape(text["app"])}</th><th>{html.escape(text["version"])}</th><th>{html.escape(text["method"])}</th><th>{html.escape(text["file"])}</th><th>{html.escape(text["snippet"])}</th></tr></thead>
-            <tbody>{hit_rows}</tbody>
-          </table>
-        </section>
+      </div>
+    </section>
+    <section class="panel wide-panel">
+      <h2>{html.escape(text["where_found"])}</h2>
+      <p class="meta">{html.escape(text["where_found_meta"])}</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>{html.escape(text["app"])}</th><th>{html.escape(text["version"])}</th><th>{html.escape(text["method"])}</th><th>{html.escape(text["file"])}</th><th>{html.escape(text["snippet"])}</th></tr></thead>
+          <tbody>{hit_rows}</tbody>
+        </table>
       </div>
     </section>
   </main>
