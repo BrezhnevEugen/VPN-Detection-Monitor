@@ -353,7 +353,15 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
     .file-meta {{ margin-top:6px; color:var(--muted); font-size:.85rem; }}
     .upload-errors {{ display:none; margin-top:12px; padding:12px 14px; border-radius:14px; background:#fff0eb; border:1px solid #f0c9bd; color:#7b2d1f; }}
     .upload-errors.active {{ display:block; }}
+    .upload-status {{ display:none; margin-top:12px; padding:12px 14px; border-radius:14px; background:#f3eee6; border:1px solid var(--border); color:#51493f; }}
+    .upload-status.active {{ display:block; }}
+    .upload-status strong {{ display:block; margin-bottom:6px; color:var(--ink); }}
+    .upload-status-track {{ display:flex; flex-wrap:wrap; gap:8px; }}
+    .upload-status-step {{ padding:6px 10px; border-radius:999px; background:#e7dfd3; color:#746b60; font-size:.86rem; }}
+    .upload-status-step.active {{ background:var(--accent-soft); color:var(--accent); font-weight:700; }}
+    .upload-status-step.done {{ background:#e4efe6; color:#355b3d; }}
     .upload-submit {{ min-height:52px; padding:14px 20px; font-weight:700; white-space:nowrap; }}
+    .upload-submit[disabled] {{ opacity:0.72; cursor:progress; }}
     .list {{ display:grid; gap:14px; }}
     .card {{ padding:16px; }}
     .eyebrow {{ display:flex; justify-content:space-between; gap:12px; color:var(--muted); font-size:.9rem; margin-bottom:8px; }}
@@ -409,6 +417,7 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
           <button class="upload-submit" type="submit">Upload And Scan</button>
         </form>
         <div id="upload-errors" class="upload-errors" aria-live="polite"></div>
+        <div id="upload-status" class="upload-status" aria-live="polite"></div>
       </section>
     </section>
 
@@ -451,6 +460,8 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
       if (!form) return;
       const bundleInput = document.getElementById('bundle');
       const errorsBox = document.getElementById('upload-errors');
+      const statusBox = document.getElementById('upload-status');
+      const submitButton = form.querySelector('button[type="submit"]');
       const allowed = ['.apk'];
 
       function showErrors(messages) {{
@@ -461,6 +472,18 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
         }}
         errorsBox.innerHTML = messages.map((msg) => `<div>${{msg}}</div>`).join('');
         errorsBox.classList.add('active');
+      }}
+
+      function renderStatus(activeIndex, doneIndex) {{
+        const steps = ['Uploading', 'Decoding', 'Scanning'];
+        const track = steps.map((label, index) => {{
+          let className = 'upload-status-step';
+          if (index < doneIndex) className += ' done';
+          else if (index === activeIndex) className += ' active';
+          return `<span class="${{className}}">${{label}}</span>`;
+        }}).join('');
+        statusBox.innerHTML = `<strong>Processing APK</strong><div class="upload-status-track">${{track}}</div>`;
+        statusBox.classList.add('active');
       }}
 
       function validExtension(name) {{
@@ -480,6 +503,13 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
           showErrors(messages);
         }} else {{
           showErrors([]);
+          renderStatus(0, 0);
+          if (submitButton) {{
+            submitButton.disabled = true;
+            submitButton.textContent = 'Processing...';
+          }}
+          window.setTimeout(() => renderStatus(1, 1), 450);
+          window.setTimeout(() => renderStatus(2, 2), 1400);
         }}
       }});
     }})();
