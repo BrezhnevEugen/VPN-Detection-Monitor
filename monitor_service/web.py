@@ -33,12 +33,14 @@ UI_TEXT = {
         "upload_and_scan": "Загрузить и сканировать",
         "priority_news": "Приоритетные новости",
         "priority_news_meta": "Новости из лент, где упомянуты приоритетные приложения или соседние сигналы по теме.",
+        "last_news_update": "Последнее обновление новостей",
         "baseline_title": "База из статьи",
         "baseline_meta_prefix": "Базовая точка из",
         "baseline_meta_link_label": "статьи на Хабре",
         "baseline_meta_suffix": ". `baseline_date` зафиксирован как `2026-04-01` по формулировке “начало апреля 2026”.",
         "scan_dynamics": "Динамика сканов",
         "scan_dynamics_meta": "Каждый запуск сканера сохраняет версию, путь, число методов и набор совпадений. Это и есть основа для динамики по релизам.",
+        "last_scan_update": "Последнее обновление сканов",
         "where_found": "Где найдено",
         "where_found_meta": "Последние срабатывания с точным файлом и строкой, чтобы было видно где именно обнаружен метод.",
         "app": "Приложение",
@@ -102,12 +104,14 @@ UI_TEXT = {
         "upload_and_scan": "Upload And Scan",
         "priority_news": "Priority News",
         "priority_news_meta": "Feed items mentioning priority apps or nearby signals related to VPN detection.",
+        "last_news_update": "Last news update",
         "baseline_title": "Baseline From Article",
         "baseline_meta_prefix": "Baseline snapshot from the",
         "baseline_meta_link_label": "Habr article",
         "baseline_meta_suffix": ". `baseline_date` is fixed as `2026-04-01` based on the article wording “early April 2026”.",
         "scan_dynamics": "Scan Dynamics",
         "scan_dynamics_meta": "Each scanner run stores the version, target path, method count, and the matched signals. That is the basis for release-to-release dynamics.",
+        "last_scan_update": "Last scan update",
         "where_found": "Where Found",
         "where_found_meta": "Recent detections with exact file and line so it is clear where a method was found.",
         "app": "App",
@@ -337,7 +341,8 @@ def _load_dashboard_data(db_path: str, limit: int, min_score: int) -> dict:
             SELECT
                 COUNT(*) AS total,
                 COALESCE(MAX(score), 0) AS top_score,
-                COUNT(DISTINCT source) AS sources
+                COUNT(DISTINCT source) AS sources,
+                MAX(created_at) AS latest_news_update
             FROM findings
             WHERE score >= ?
             """,
@@ -361,6 +366,13 @@ def _load_dashboard_data(db_path: str, limit: int, min_score: int) -> dict:
             """
         ).fetchall()
 
+        scan_totals = conn.execute(
+            """
+            SELECT MAX(scanned_at) AS latest_scan_update
+            FROM scan_runs
+            """
+        ).fetchone()
+
         hits = conn.execute(
             """
             SELECT h.run_id, r.app_name, r.version, h.method_id, h.file_path, h.line_no, h.snippet
@@ -378,6 +390,8 @@ def _load_dashboard_data(db_path: str, limit: int, min_score: int) -> dict:
             "sources": totals["sources"],
             "priority_apps": len(baselines),
             "scan_runs": len(runs),
+            "latest_news_update": totals["latest_news_update"],
+            "latest_scan_update": scan_totals["latest_scan_update"],
         },
         "findings": [
             {
@@ -443,6 +457,8 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
     summary = payload["summary"]
     flash_html = _render_flash(flash or {})
     lang_links = _render_lang_links(lang, limit, min_score)
+    latest_news_update = _render_last_update(text["last_news_update"], summary.get("latest_news_update"))
+    latest_scan_update = _render_last_update(text["last_scan_update"], summary.get("latest_scan_update"))
     js_labels = json.dumps(
         {
             "attach_apk": text["attach_apk"],
@@ -602,6 +618,7 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
         <section class="panel">
           <h2>{html.escape(text["priority_news"])}</h2>
           <p class="meta">{html.escape(text["priority_news_meta"])}</p>
+          {latest_news_update}
           <div class="list">{cards}</div>
         </section>
         <section class="panel">
@@ -617,6 +634,7 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
         <section class="panel">
           <h2>{html.escape(text["scan_dynamics"])}</h2>
           <p class="meta">{html.escape(text["scan_dynamics_meta"])}</p>
+          {latest_scan_update}
           <div class="list">{run_cards}</div>
         </section>
       </div>
@@ -768,6 +786,12 @@ def _render_flash(flash: dict[str, str]) -> str:
     if level not in {"success", "error"}:
         level = "success"
     return f'<div class="flash {level}">{html.escape(message)}</div>'
+
+
+def _render_last_update(label: str, value: str | None) -> str:
+    if not value:
+        return ""
+    return f'<p class="meta"><strong>{html.escape(label)}:</strong> {html.escape(value)} UTC</p>'
 
 
 def _render_baseline_meta(text: dict[str, str]) -> str:
