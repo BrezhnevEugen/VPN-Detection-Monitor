@@ -13,6 +13,143 @@ from monitor_service.storage import Storage
 
 
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
+SUPPORTED_LANGS = {"ru", "en"}
+UI_TEXT = {
+    "ru": {
+        "page_title": "VPN Detection Monitor",
+        "hero_title": "VPN Detection Monitor",
+        "hero_lede": "Локальная витрина для приоритетного мониторинга приложений из рейтинга статьи и для статического сканирования декомпилированных APK-артефактов. Здесь видно базовую таблицу из статьи, свежие новости по приложениям и динамику найденных методов по версиям.",
+        "lang_label": "Язык",
+        "news_findings": "Новостных находок",
+        "top_score": "Макс. релевантность",
+        "news_sources": "Источников",
+        "tracked_apps": "Отслеживаемых приложений",
+        "saved_scans": "Сохранённых сканов",
+        "minimum_score": "Минимальный score",
+        "rows": "Строк",
+        "update_view": "Обновить",
+        "upload_apk": "Загрузить APK для скана",
+        "apk_file": "APK-файл",
+        "upload_and_scan": "Загрузить и сканировать",
+        "priority_news": "Приоритетные новости",
+        "priority_news_meta": "Новости из лент, где упомянуты приоритетные приложения или соседние сигналы по теме.",
+        "baseline_title": "База из статьи",
+        "baseline_meta": "Базовая точка из статьи на Хабре. `baseline_date` зафиксирован как `2026-04-01` по формулировке “начало апреля 2026”.",
+        "scan_dynamics": "Динамика сканов",
+        "scan_dynamics_meta": "Каждый запуск сканера сохраняет версию, путь, число методов и набор совпадений. Это и есть основа для динамики по релизам.",
+        "where_found": "Где найдено",
+        "where_found_meta": "Последние срабатывания с точным файлом и строкой, чтобы было видно где именно обнаружен метод.",
+        "app": "Приложение",
+        "methods": "Методы",
+        "signatures": "Сигнатуры",
+        "notes": "Примечания",
+        "version": "Версия",
+        "method": "Метод",
+        "file": "Файл",
+        "snippet": "Фрагмент",
+        "no_findings": "Пока нет находок.",
+        "no_baseline": "Пока нет baseline-данных.",
+        "no_scans": "Пока нет сканов.",
+        "no_scan_hits": "Пока нет срабатываний сканера.",
+        "published": "Опубликовано",
+        "score_badge": "score",
+        "scanned": "Сканировано",
+        "files": "файлов",
+        "hits": "совпадений",
+        "export_report": "Экспорт отчёта",
+        "missing_app": "Не указан параметр app",
+        "report_not_found": "Отчёт не найден",
+        "not_found": "Не найдено",
+        "apk_too_large": "APK слишком большой. Лимит 200 МБ.",
+        "attach_apk": "Прикрепите APK-файл.",
+        "unsupported_file": "Недопустимый тип файла. Разрешён только .apk.",
+        "scan_saved": "Скан сохранён: {app_name} {version}, методов={methods}, run_id={run_id}",
+        "invalid_apk_client": "Недопустимое расширение файла. Разрешено: .apk.",
+        "processing_apk": "Обработка APK",
+        "uploading": "Загрузка",
+        "decoding": "Декомпиляция",
+        "scanning": "Сканирование",
+        "processing": "Обработка...",
+        "report_title": "Отчёт сканирования: {app_name} {version}",
+        "scanned_at": "Время сканирования",
+        "scan_target": "Цель сканирования",
+        "methods_found": "Найдено методов",
+        "files_scanned": "Просканировано файлов",
+        "baseline_comparison": "Сравнение с baseline",
+        "baseline_date": "Дата baseline",
+        "baseline_methods_count": "Число методов в baseline",
+        "baseline_methods": "Методы baseline",
+        "recent_history": "Недавняя история",
+        "hits_title": "Совпадения",
+    },
+    "en": {
+        "page_title": "VPN Detection Monitor",
+        "hero_title": "VPN Detection Monitor",
+        "hero_lede": "A live dashboard for monitoring apps from the article ranking and for statically scanning decompiled APK artifacts. It brings together the article baseline, recent news about tracked apps, and scan dynamics across versions.",
+        "lang_label": "Language",
+        "news_findings": "News findings",
+        "top_score": "Top relevance score",
+        "news_sources": "News sources",
+        "tracked_apps": "Tracked apps",
+        "saved_scans": "Saved scans",
+        "minimum_score": "Minimum score",
+        "rows": "Rows",
+        "update_view": "Update view",
+        "upload_apk": "Upload APK For Scan",
+        "apk_file": "APK file",
+        "upload_and_scan": "Upload And Scan",
+        "priority_news": "Priority News",
+        "priority_news_meta": "Feed items mentioning priority apps or nearby signals related to VPN detection.",
+        "baseline_title": "Baseline From Article",
+        "baseline_meta": "Baseline snapshot from the Habr article. `baseline_date` is fixed as `2026-04-01` based on the article wording “early April 2026”.",
+        "scan_dynamics": "Scan Dynamics",
+        "scan_dynamics_meta": "Each scanner run stores the version, target path, method count, and the matched signals. That is the basis for release-to-release dynamics.",
+        "where_found": "Where Found",
+        "where_found_meta": "Recent detections with exact file and line so it is clear where a method was found.",
+        "app": "App",
+        "methods": "Methods",
+        "signatures": "Signatures",
+        "notes": "Notes",
+        "version": "Version",
+        "method": "Method",
+        "file": "File",
+        "snippet": "Snippet",
+        "no_findings": "No findings yet.",
+        "no_baseline": "No baseline data yet.",
+        "no_scans": "No scans yet.",
+        "no_scan_hits": "No scan hits yet.",
+        "published": "Published",
+        "score_badge": "score",
+        "scanned": "Scanned",
+        "files": "files",
+        "hits": "hits",
+        "export_report": "Export report",
+        "missing_app": "Missing app parameter",
+        "report_not_found": "Report not found",
+        "not_found": "Not found",
+        "apk_too_large": "APK is too large. Limit is 200 MB.",
+        "attach_apk": "Please attach an APK file.",
+        "unsupported_file": "Unsupported file type. Allowed: .apk.",
+        "scan_saved": "Scan saved: {app_name} {version}, methods={methods}, run_id={run_id}",
+        "invalid_apk_client": "Unsupported file extension. Allowed: .apk.",
+        "processing_apk": "Processing APK",
+        "uploading": "Uploading",
+        "decoding": "Decoding",
+        "scanning": "Scanning",
+        "processing": "Processing...",
+        "report_title": "Scan report: {app_name} {version}",
+        "scanned_at": "Scanned at",
+        "scan_target": "Scan target",
+        "methods_found": "Methods found",
+        "files_scanned": "Files scanned",
+        "baseline_comparison": "Baseline comparison",
+        "baseline_date": "Baseline date",
+        "baseline_methods_count": "Baseline methods count",
+        "baseline_methods": "Baseline methods",
+        "recent_history": "Recent history",
+        "hits_title": "Hits",
+    },
+}
 LEGACY_METHOD_DETAILS = {
     "tun0": {"label": "Tun interface probe", "category": "interface-probe", "severity": "high"},
     "transport_vpn": {"label": "Android VPN transport check", "category": "network-api", "severity": "high"},
@@ -40,6 +177,7 @@ def _build_handler(db_path: str):
         def do_GET(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
             query = parse_qs(parsed.query)
+            lang = _resolve_lang(query.get("lang", [""])[0], self.headers.get("Accept-Language", ""))
             limit = _safe_int(query.get("limit", ["50"])[0], default=50, minimum=1, maximum=200)
             min_score = _safe_int(query.get("min_score", ["0"])[0], default=0, minimum=0, maximum=50)
             flash = {
@@ -48,7 +186,7 @@ def _build_handler(db_path: str):
             }
 
             if parsed.path == "/":
-                html_body = _render_page(db_file, limit=limit, min_score=min_score, flash=flash)
+                html_body = _render_page(db_file, limit=limit, min_score=min_score, flash=flash, lang=lang)
                 self._send_html(html_body)
                 return
 
@@ -61,7 +199,7 @@ def _build_handler(db_path: str):
                 app_name = (query.get("app", [""])[0] or "").strip()
                 version = (query.get("version", [""])[0] or "").strip() or None
                 if not app_name:
-                    self.send_error(400, "Missing app parameter")
+                    self.send_error(400, UI_TEXT[lang]["missing_app"])
                     return
                 storage = Storage(db_file)
                 try:
@@ -69,9 +207,9 @@ def _build_handler(db_path: str):
                 finally:
                     storage.close()
                 if report is None:
-                    self.send_error(404, "Report not found")
+                    self.send_error(404, UI_TEXT[lang]["report_not_found"])
                     return
-                body = _render_report_markdown(report)
+                body = _render_report_markdown(report, lang)
                 encoded = body.encode("utf-8")
                 filename = f"{_slugify(app_name)}-{_slugify(version or report['run']['version'])}.md"
                 self.send_response(200)
@@ -82,7 +220,7 @@ def _build_handler(db_path: str):
                 self.wfile.write(encoded)
                 return
 
-            self.send_error(404, "Not found")
+            self.send_error(404, UI_TEXT[lang]["not_found"])
 
         def do_POST(self) -> None:  # noqa: N802
             if self.path != "/scan-upload":
@@ -115,8 +253,9 @@ def _build_handler(db_path: str):
 
         def _handle_scan_upload(self) -> None:
             content_length = int(self.headers.get("Content-Length", "0") or "0")
+            lang = _resolve_lang("", self.headers.get("Accept-Language", ""))
             if content_length > MAX_UPLOAD_BYTES:
-                raise ValueError("APK is too large. Limit is 200 MB.")
+                raise ValueError(UI_TEXT[lang]["apk_too_large"])
 
             form = cgi.FieldStorage(
                 fp=self.rfile,
@@ -129,13 +268,14 @@ def _build_handler(db_path: str):
             )
 
             upload = form["bundle"] if "bundle" in form else None
+            lang = _resolve_lang(form.getfirst("lang") or "", self.headers.get("Accept-Language", ""))
 
             if upload is None or not getattr(upload, "filename", ""):
-                raise ValueError("Please attach an APK file.")
+                raise ValueError(UI_TEXT[lang]["attach_apk"])
 
             filename = Path(upload.filename).name
             if not _is_allowed_archive(filename):
-                raise ValueError("Unsupported file type. Allowed: .apk.")
+                raise ValueError(UI_TEXT[lang]["unsupported_file"])
             archive_path = archives_root / filename
             archive_path.write_bytes(upload.file.read())
 
@@ -150,11 +290,17 @@ def _build_handler(db_path: str):
 
             self._redirect_with_status(
                 "success",
-                f"Scan saved: {metadata['app_name']} {metadata['version']}, methods={len(result['methods'])}, run_id={run_id}",
+                UI_TEXT[lang]["scan_saved"].format(
+                    app_name=metadata["app_name"],
+                    version=metadata["version"],
+                    methods=len(result["methods"]),
+                    run_id=run_id,
+                ),
+                lang,
             )
 
-        def _redirect_with_status(self, level: str, message: str) -> None:
-            query = urlencode({"scan_status": level, "scan_message": message})
+        def _redirect_with_status(self, level: str, message: str, lang: str = "ru") -> None:
+            query = urlencode({"scan_status": level, "scan_message": message, "lang": lang})
             self.send_response(303)
             self.send_header("Location", f"/?{query}")
             self.end_headers()
@@ -283,21 +429,35 @@ def _load_dashboard_data(db_path: str, limit: int, min_score: int) -> dict:
     }
 
 
-def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str] | None = None) -> str:
+def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str] | None = None, lang: str = "ru") -> str:
+    text = UI_TEXT[lang]
     payload = _load_dashboard_data(db_path, limit=limit, min_score=min_score)
-    cards = "\n".join(_render_card(item) for item in payload["findings"]) or "<p>No findings yet.</p>"
-    baseline_rows = "\n".join(_render_baseline_row(item) for item in payload["baselines"]) or "<tr><td colspan='5'>No baseline data yet.</td></tr>"
-    run_cards = "\n".join(_render_run_card(item) for item in payload["scan_runs"][:12]) or "<p>No scans yet.</p>"
-    hit_rows = "\n".join(_render_hit_row(item) for item in payload["scan_hits"][:40]) or "<tr><td colspan='5'>No scan hits yet.</td></tr>"
+    cards = "\n".join(_render_card(item, text) for item in payload["findings"]) or f"<p>{html.escape(text['no_findings'])}</p>"
+    baseline_rows = "\n".join(_render_baseline_row(item) for item in payload["baselines"]) or f"<tr><td colspan='5'>{html.escape(text['no_baseline'])}</td></tr>"
+    run_cards = "\n".join(_render_run_card(item, text, lang) for item in payload["scan_runs"][:12]) or f"<p>{html.escape(text['no_scans'])}</p>"
+    hit_rows = "\n".join(_render_hit_row(item) for item in payload["scan_hits"][:40]) or f"<tr><td colspan='5'>{html.escape(text['no_scan_hits'])}</td></tr>"
     summary = payload["summary"]
     flash_html = _render_flash(flash or {})
+    lang_links = _render_lang_links(lang, limit, min_score)
+    js_labels = json.dumps(
+        {
+            "attach_apk": text["attach_apk"],
+            "invalid_apk_client": text["invalid_apk_client"],
+            "processing_apk": text["processing_apk"],
+            "uploading": text["uploading"],
+            "decoding": text["decoding"],
+            "scanning": text["scanning"],
+            "processing": text["processing"],
+        },
+        ensure_ascii=False,
+    )
 
     return f"""<!doctype html>
-<html lang="ru">
+<html lang="{lang}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>VPN Detection Monitor</title>
+  <title>{html.escape(text["page_title"])}</title>
   <meta http-equiv="refresh" content="60">
   <style>
     :root {{
@@ -329,6 +489,11 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
     .stat strong {{ display:block; font-size: 1.7rem; }}
     .stat span {{ color: var(--muted); font-size: .95rem; }}
     .controls {{ display:flex; flex-wrap:wrap; gap:14px; margin-top:18px; }}
+    .toolbar {{ display:flex; justify-content:space-between; gap:14px; align-items:flex-end; flex-wrap:wrap; margin-top:18px; }}
+    .lang-switch {{ display:flex; gap:8px; align-items:center; }}
+    .lang-switch strong {{ color:var(--muted); font-size:.92rem; }}
+    .lang-switch a {{ text-decoration:none; color:var(--muted); padding:8px 12px; border-radius:999px; border:1px solid var(--border); background:#fff; }}
+    .lang-switch a.active {{ color:var(--accent); border-color:#cba892; background:#fff8f4; font-weight:700; }}
     label {{ display:grid; gap:6px; color: var(--muted); font-size:.92rem; }}
     input {{ width:120px; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:#fff; }}
     input[type="file"] {{ width:100%; padding:10px 0; border:0; background:transparent; }}
@@ -382,6 +547,7 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
       .wrap {{ padding:16px 12px 28px; }}
       .hero, .panel, .card {{ border-radius:18px; }}
       input {{ width:100%; }}
+      .toolbar {{ align-items:stretch; }}
       .upload-form {{ grid-template-columns: 1fr; }}
     }}
   </style>
@@ -389,31 +555,36 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
 <body>
   <main class="wrap">
     <section class="hero">
-      <h1>VPN Detection Monitor</h1>
-      <p class="lede">Локальная витрина для приоритетного мониторинга приложений из рейтинга статьи и для статического сканирования декомпилированных APK-артефактов. Здесь видно базовую таблицу из статьи, свежие новости по приложениям и динамику найденных методов по версиям.</p>
+      <h1>{html.escape(text["hero_title"])}</h1>
+      <p class="lede">{html.escape(text["hero_lede"])}</p>
       <div class="stats">
-        <div class="stat"><strong>{summary["total"]}</strong><span>News findings</span></div>
-        <div class="stat"><strong>{summary["top_score"]}</strong><span>Top relevance score</span></div>
-        <div class="stat"><strong>{summary["sources"]}</strong><span>News sources</span></div>
-        <div class="stat"><strong>{summary["priority_apps"]}</strong><span>Tracked apps</span></div>
-        <div class="stat"><strong>{summary["scan_runs"]}</strong><span>Saved scans</span></div>
+        <div class="stat"><strong>{summary["total"]}</strong><span>{html.escape(text["news_findings"])}</span></div>
+        <div class="stat"><strong>{summary["top_score"]}</strong><span>{html.escape(text["top_score"])}</span></div>
+        <div class="stat"><strong>{summary["sources"]}</strong><span>{html.escape(text["news_sources"])}</span></div>
+        <div class="stat"><strong>{summary["priority_apps"]}</strong><span>{html.escape(text["tracked_apps"])}</span></div>
+        <div class="stat"><strong>{summary["scan_runs"]}</strong><span>{html.escape(text["saved_scans"])}</span></div>
       </div>
+      <div class="toolbar">
       <form class="controls" method="get" action="/">
-        <label>Minimum score<input type="number" name="min_score" value="{min_score}" min="0" max="50"></label>
-        <label>Rows<input type="number" name="limit" value="{limit}" min="1" max="200"></label>
-        <button type="submit">Update View</button>
+        <input type="hidden" name="lang" value="{lang}">
+        <label>{html.escape(text["minimum_score"])}<input type="number" name="min_score" value="{min_score}" min="0" max="50"></label>
+        <label>{html.escape(text["rows"])}<input type="number" name="limit" value="{limit}" min="1" max="200"></label>
+        <button type="submit">{html.escape(text["update_view"])}</button>
       </form>
+      {lang_links}
+      </div>
       {flash_html}
       <section class="upload-panel">
-        <h2>Upload APK For Scan</h2>
+        <h2>{html.escape(text["upload_apk"])}</h2>
         <form class="upload-form" id="scan-upload-form" method="post" action="/scan-upload" enctype="multipart/form-data" novalidate>
+          <input type="hidden" name="lang" value="{lang}">
           <div class="upload-field">
-            <label for="bundle">APK file</label>
+            <label for="bundle">{html.escape(text["apk_file"])}</label>
             <div class="file-shell">
               <input id="bundle" type="file" name="bundle" accept=".apk" required>
             </div>
           </div>
-          <button class="upload-submit" type="submit">Upload And Scan</button>
+          <button class="upload-submit" type="submit">{html.escape(text["upload_and_scan"])}</button>
         </form>
         <div id="upload-errors" class="upload-errors" aria-live="polite"></div>
         <div id="upload-status" class="upload-status" aria-live="polite"></div>
@@ -423,30 +594,30 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
     <section class="grid">
       <div class="stack">
         <section class="panel">
-          <h2>Priority News</h2>
-          <p class="meta">Новости из лент, где упомянуты приоритетные приложения или соседние сигналы по теме.</p>
+          <h2>{html.escape(text["priority_news"])}</h2>
+          <p class="meta">{html.escape(text["priority_news_meta"])}</p>
           <div class="list">{cards}</div>
         </section>
         <section class="panel">
-          <h2>Baseline From Article</h2>
-          <p class="meta">Базовая точка из статьи на Хабре. `baseline_date` зафиксирован как `2026-04-01` по формулировке “начало апреля 2026”.</p>
+          <h2>{html.escape(text["baseline_title"])}</h2>
+          <p class="meta">{html.escape(text["baseline_meta"])}</p>
           <table>
-            <thead><tr><th>#</th><th>App</th><th>Methods</th><th>Signatures</th><th>Notes</th></tr></thead>
+            <thead><tr><th>#</th><th>{html.escape(text["app"])}</th><th>{html.escape(text["methods"])}</th><th>{html.escape(text["signatures"])}</th><th>{html.escape(text["notes"])}</th></tr></thead>
             <tbody>{baseline_rows}</tbody>
           </table>
         </section>
       </div>
       <div class="stack">
         <section class="panel">
-          <h2>Scan Dynamics</h2>
-          <p class="meta">Каждый запуск сканера сохраняет версию, путь, число методов и набор совпадений. Это и есть основа для динамики по релизам.</p>
+          <h2>{html.escape(text["scan_dynamics"])}</h2>
+          <p class="meta">{html.escape(text["scan_dynamics_meta"])}</p>
           <div class="list">{run_cards}</div>
         </section>
         <section class="panel">
-          <h2>Where Found</h2>
-          <p class="meta">Последние срабатывания с точным файлом и строкой, чтобы было видно где именно обнаружен метод.</p>
+          <h2>{html.escape(text["where_found"])}</h2>
+          <p class="meta">{html.escape(text["where_found_meta"])}</p>
           <table>
-            <thead><tr><th>App</th><th>Version</th><th>Method</th><th>File</th><th>Snippet</th></tr></thead>
+            <thead><tr><th>{html.escape(text["app"])}</th><th>{html.escape(text["version"])}</th><th>{html.escape(text["method"])}</th><th>{html.escape(text["file"])}</th><th>{html.escape(text["snippet"])}</th></tr></thead>
             <tbody>{hit_rows}</tbody>
           </table>
         </section>
@@ -462,6 +633,7 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
       const statusBox = document.getElementById('upload-status');
       const submitButton = form.querySelector('button[type="submit"]');
       const allowed = ['.apk'];
+      const labels = {js_labels};
 
       function showErrors(messages) {{
         if (!messages.length) {{
@@ -474,14 +646,14 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
       }}
 
       function renderStatus(activeIndex, doneIndex) {{
-        const steps = ['Uploading', 'Decoding', 'Scanning'];
+        const steps = [labels.uploading, labels.decoding, labels.scanning];
         const track = steps.map((label, index) => {{
           let className = 'upload-status-step';
           if (index < doneIndex) className += ' done';
           else if (index === activeIndex) className += ' active';
           return `<span class="${{className}}">${{label}}</span>`;
         }}).join('');
-        statusBox.innerHTML = `<strong>Processing APK</strong><div class="upload-status-track">${{track}}</div>`;
+        statusBox.innerHTML = `<strong>${{labels.processing_apk}}</strong><div class="upload-status-track">${{track}}</div>`;
         statusBox.classList.add('active');
       }}
 
@@ -493,9 +665,9 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
       form.addEventListener('submit', (event) => {{
         const messages = [];
         if (!bundleInput.files || !bundleInput.files.length) {{
-          messages.push('Прикрепите APK-файл.');
+          messages.push(labels.attach_apk);
         }} else if (!validExtension(bundleInput.files[0].name)) {{
-          messages.push('Недопустимое расширение файла. Разрешено: .apk.');
+          messages.push(labels.invalid_apk_client);
         }}
         if (messages.length) {{
           event.preventDefault();
@@ -505,7 +677,7 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
           renderStatus(0, 0);
           if (submitButton) {{
             submitButton.disabled = true;
-            submitButton.textContent = 'Processing...';
+            submitButton.textContent = labels.processing;
           }}
           window.setTimeout(() => renderStatus(1, 1), 450);
           window.setTimeout(() => renderStatus(2, 2), 1400);
@@ -517,7 +689,7 @@ def _render_page(db_path: str, limit: int, min_score: int, flash: dict[str, str]
 </html>"""
 
 
-def _render_card(item: dict) -> str:
+def _render_card(item: dict, text: dict[str, str]) -> str:
     tags = item["matched_priority_apps"] + item["matched_phrases"] + item["matched_keywords"]
     tags_html = "".join(f"<span>{html.escape(tag)}</span>" for tag in tags[:12])
     published = html.escape(item["published_at"] or item["created_at"] or "n/a")
@@ -527,11 +699,11 @@ def _render_card(item: dict) -> str:
     link = html.escape(item["link"], quote=True)
     return f"""
     <article class="card">
-      <div class="eyebrow"><span>{source}</span><span class="badge">score {item["score"]}</span></div>
+      <div class="eyebrow"><span>{source}</span><span class="badge">{html.escape(text["score_badge"])} {item["score"]}</span></div>
       <h3><a href="{link}" target="_blank" rel="noreferrer">{title}</a></h3>
       <p class="summary">{summary}</p>
       <div class="tags">{tags_html}</div>
-      <div class="eyebrow" style="margin-top:10px"><span>Published: {published}</span></div>
+      <div class="eyebrow" style="margin-top:10px"><span>{html.escape(text["published"])}: {published}</span></div>
     </article>"""
 
 
@@ -546,7 +718,7 @@ def _render_baseline_row(item: dict) -> str:
     )
 
 
-def _render_run_card(item: dict) -> str:
+def _render_run_card(item: dict, text: dict[str, str], lang: str) -> str:
     methods = "".join(f"<span>{html.escape(method)}</span>" for method in item["methods"])
     categories = item["summary"].get("categories", {})
     severities = item["summary"].get("severity_counts", {})
@@ -557,15 +729,15 @@ def _render_run_card(item: dict) -> str:
     scanned_at = html.escape(item["scanned_at"])
     files_scanned = item["summary"].get("files_scanned", 0)
     hits_count = item["summary"].get("hits_count", 0)
-    report_query = urlencode({"app": item["app_name"], "version": item["version"]})
+    report_query = urlencode({"app": item["app_name"], "version": item["version"], "lang": lang})
     return f"""
     <article class="card">
-      <div class="eyebrow"><span>{html.escape(item["app_name"])} {html.escape(item["version"])}</span><span class="badge">{item["method_count"]} methods</span></div>
-      <p class="summary">Scanned: <span class="mono">{target}</span></p>
+      <div class="eyebrow"><span>{html.escape(item["app_name"])} {html.escape(item["version"])}</span><span class="badge">{item["method_count"]} {html.escape(text["methods"]).lower()}</span></div>
+      <p class="summary">{html.escape(text["scanned"])}: <span class="mono">{target}</span></p>
       <div class="tags">{methods}</div>
       <div class="tags" style="margin-top:8px">{extra_tags}</div>
-      <div class="eyebrow" style="margin-top:10px"><span>{files_scanned} files</span><span>{hits_count} hits</span><span>{scanned_at}</span></div>
-      <div class="actions"><a href="/report?{report_query}">Export report</a></div>
+      <div class="eyebrow" style="margin-top:10px"><span>{files_scanned} {html.escape(text["files"])}</span><span>{hits_count} {html.escape(text["hits"])}</span><span>{scanned_at}</span></div>
+      <div class="actions"><a href="/report?{report_query}">{html.escape(text["export_report"])}</a></div>
     </article>"""
 
 
@@ -590,22 +762,23 @@ def _render_flash(flash: dict[str, str]) -> str:
     return f'<div class="flash {level}">{html.escape(message)}</div>'
 
 
-def _render_report_markdown(report: dict) -> str:
+def _render_report_markdown(report: dict, lang: str = "ru") -> str:
+    text = UI_TEXT[lang]
     run = report["run"]
     baseline = report["baseline"]
     history = report["history"]
     hits = report["hits"]
     summary = run["summary"]
     lines = [
-        f"# Scan report: {run['app_name']} {run['version']}",
+        f"# {text['report_title'].format(app_name=run['app_name'], version=run['version'])}",
         "",
-        f"- Scanned at: {run['scanned_at']}",
-        f"- Scan target: `{run['scan_target']}`",
-        f"- Methods found: {run['method_count']}",
-        f"- Files scanned: {summary.get('files_scanned', 0)}",
-        f"- Hits: {summary.get('hits_count', 0)}",
+        f"- {text['scanned_at']}: {run['scanned_at']}",
+        f"- {text['scan_target']}: `{run['scan_target']}`",
+        f"- {text['methods_found']}: {run['method_count']}",
+        f"- {text['files_scanned']}: {summary.get('files_scanned', 0)}",
+        f"- {text['hits']}: {summary.get('hits_count', 0)}",
         "",
-        "## Methods",
+        f"## {text['methods']}",
     ]
     for method in run["methods"]:
         details = summary.get("method_details", {}).get(method, LEGACY_METHOD_DETAILS.get(method, {}))
@@ -618,21 +791,21 @@ def _render_report_markdown(report: dict) -> str:
         lines.extend(
             [
                 "",
-                "## Baseline comparison",
-                f"- Baseline date: {baseline['baseline_date']}",
-                f"- Baseline methods count: {baseline['methods_count']}",
-                f"- Baseline methods: {', '.join(baseline['methods'])}",
-                f"- Notes: {baseline['notes']}",
+                f"## {text['baseline_comparison']}",
+                f"- {text['baseline_date']}: {baseline['baseline_date']}",
+                f"- {text['baseline_methods_count']}: {baseline['methods_count']}",
+                f"- {text['baseline_methods']}: {', '.join(baseline['methods'])}",
+                f"- {text['notes']}: {baseline['notes']}",
             ]
         )
 
-    lines.extend(["", "## Recent history"])
+    lines.extend(["", f"## {text['recent_history']}"])
     for item in history:
         lines.append(
             f"- {item['version']} at {item['scanned_at']}: {item['method_count']} methods ({', '.join(item['methods'])})"
         )
 
-    lines.extend(["", "## Hits"])
+    lines.extend(["", f"## {text['hits_title']}"])
     for hit in hits:
         location = f"{hit['file_path']}:{hit['line_no'] or '?'}"
         lines.append(f"- `{hit['method_id']}` at `{location}` -> `{hit['snippet']}`")
@@ -656,3 +829,23 @@ def _safe_int(raw: str, default: int, minimum: int, maximum: int) -> int:
     except ValueError:
         return default
     return max(minimum, min(maximum, value))
+
+
+def _resolve_lang(raw_lang: str, accept_language: str) -> str:
+    if raw_lang in SUPPORTED_LANGS:
+        return raw_lang
+    normalized = (accept_language or "").lower()
+    for candidate in ("ru", "en"):
+        if candidate in normalized:
+            return candidate
+    return "ru"
+
+
+def _render_lang_links(current_lang: str, limit: int, min_score: int) -> str:
+    links = []
+    for lang in ("ru", "en"):
+        query = urlencode({"lang": lang, "limit": limit, "min_score": min_score})
+        class_name = "active" if lang == current_lang else ""
+        label = lang.upper()
+        links.append(f'<a class="{class_name}" href="/?{query}">{label}</a>')
+    return f'<div class="lang-switch"><strong>{html.escape(UI_TEXT[current_lang]["lang_label"])}</strong>{"".join(links)}</div>'
